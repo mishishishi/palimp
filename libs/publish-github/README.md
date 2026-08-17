@@ -118,17 +118,18 @@ consumers.
 
 ## Quirks
 
-**The runs query has no event filter.** Both `findRunSince` and `getLatestRun` call
-`…/runs?per_page=N` without `event=workflow_dispatch`, so *any* run of that workflow counts —
-push-triggered, PR-triggered, or manually re-run from the Actions tab.
+**Only `workflow_dispatch` runs are visible.** Both queries filter on
+`event=workflow_dispatch`, so the drawer reports only runs Palimp could have started. It ignores
+push- and PR-triggered runs of the same workflow.
 
-That interacts badly with how this repo is wired. Its deploy workflows are also the publish
+That filter is load-bearing in this repo, because the deploy workflows double as the publish
 target ([deploy-supabase.yml](../../.github/workflows/deploy-supabase.yml) sets
-`NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml`), and they trigger on `push` and
-`pull_request` as well as `workflow_dispatch`. So every push to `main` appears in the drawer as
-the latest publish and disables the Publish button while it runs. Sound in intent — that deploy
-genuinely is a publish — but Palimp cannot tell its own dispatches from ordinary CI. Adding
-`&event=workflow_dispatch` to both queries would separate them.
+`NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml`) and also trigger on `push` and
+`pull_request`. Without it, every push to `main` would appear as the latest publish and disable
+the Publish button while it ran.
+
+The flip side: a push-triggered deploy genuinely does republish the site, and the drawer won't
+show it. "Latest publish" means "latest publish *dispatched from here*", not "latest deploy".
 
 **Rate limits are not handled.** `getLatestRun` polls every 10 s while a run is unfinished, on
 top of react-query's refetch-on-focus. Well inside GitHub's 5 000 requests/hour for an

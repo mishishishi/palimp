@@ -283,11 +283,10 @@ No public-API breakages outside the workspace (the `PalimpPublishAdapter` shape 
 
 Added after the fact. The plan is unedited above.
 
-- **No `event=workflow_dispatch` filter.** Both queries were specified with it; the shipped
-  `runsUrl` in [libs/publish-github/src/client.ts](../../libs/publish-github/src/client.ts) is
-  just `…/runs?per_page=N`. So any run of the workflow counts as the latest publish — including
-  push- and PR-triggered ones, which the deploy workflows also fire on. This is the plan's most
-  consequential miss; see
+- **~~No `event=workflow_dispatch` filter.~~ Since fixed.** Both queries were specified with it,
+  but the original `runsUrl` shipped as just `…/runs?per_page=N`, so any run of the workflow —
+  including the push- and PR-triggered ones the deploy workflows also fire on — counted as the
+  latest publish. The filter was added later, bringing the code back in line with this plan; see
   [the quirk write-up](../../libs/publish-github/README.md#quirks).
 - **Polling is every 10 s, not 3 s** (`usePublishRun.ts`).
 - **`usePublishButton` has no `if (!adapter)` early return.** `available` is hardcoded `true`,
