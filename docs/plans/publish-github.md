@@ -1,5 +1,14 @@
 # Plan: `@palimp/publish-github` integration
 
+> **Historical design record — not current API.** Written before this feature was built and kept
+> as written. For how the code behaves today see
+> [libs/publish-github/README.md](../../libs/publish-github/README.md). Context:
+> [README.md](README.md).
+>
+> The adapter sketched here was replaced almost immediately by
+> [publish-status.md](publish-status.md) — see the divergence note at the end of this file before
+> using any code block below.
+
 ## Context
 
 The Devtools panel in `libs/core/src/Admin/Devtools/index.tsx:91` renders a hard-disabled `Publish` button — a deliberate placeholder for the eventual deploy/publish action. We want admins to be able to trigger a GitHub Actions workflow (typically a site rebuild/deploy) from that button.
@@ -138,3 +147,21 @@ Mirror `libs/be-supabase/` layout exactly. Files:
 - Status / history of recent runs.
 - Per-environment workflow selection.
 - Listing available workflows.
+
+## Divergence from what shipped
+
+Added after the fact. The plan is unedited above.
+
+- **`PalimpPublishAdapter` no longer has this shape.** The single `publish: () => Promise<void>`
+  was replaced by `publish(token) => Promise<PalimpPublishRun>` plus `getLatestRun(token)` in
+  [publish-status.md](publish-status.md), which also introduced the `PalimpPublishRun` type and
+  the status/conclusion enums.
+- **`GithubPublishOptions` carries no `token`.** The two "out of scope" items at the bottom —
+  polling the run and showing status — were both built, and the token moved with them: it is now
+  the signed-in user's `publishToken`, read from their profile row and passed per call, rather
+  than adapter config from a `NEXT_PUBLIC_GITHUB_TOKEN` env var. The example layouts pass only
+  `owner` / `repo` / `workflow`.
+- **`PalimpPublishContext` is not nullable.** It is `createContext<PalimpPublishAdapter>(null!)`,
+  so the "if no provider is mounted the button stays disabled" behaviour described in Context was
+  not what got built — the button renders enabled and clicking is a silent no-op.
+- The `usePublishButton` return value described in §2 was rewritten by the follow-up plan.

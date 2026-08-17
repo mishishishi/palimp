@@ -1,5 +1,13 @@
 ## Plan: `@palimp/be-firebase` (Firebase backend)
 
+> **Historical design record — not current API.** Written before this feature was built and kept
+> as written. For how the code behaves today see [../architecture.md](../architecture.md) and
+> [libs/be-firebase/README.md](../../libs/be-firebase/README.md). Context:
+> [README.md](README.md).
+>
+> This one landed essentially as proposed, including the "Files modified: **None**" claim below —
+> which is the evidence the architecture doc cites for the adapter design.
+
 ### Context
 
 Today the only data backend is `@palimp/be-supabase` (`libs/be-supabase/`). It exposes three entry points — `./client`, `./server`, `./react` — backed by:
