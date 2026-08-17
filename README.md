@@ -124,9 +124,9 @@ Node 26 (`.nvmrc`), pnpm 11.8.
 ## Status
 
 Pre-1.0 and honest about it: no tests, no changelog, no published npm artifacts. `check-types` is
-the only automated gate. Known rough edges — a stale session hanging the drawer, the publish
-adapter counting non-publish CI runs, a leftover `Xcore` name in the render path — are catalogued
-in [docs/architecture.md](docs/architecture.md#sharp-edges) rather than hidden.
+the only automated gate. Known rough edges — a stale session hanging the drawer, a leftover
+`Xcore` name in the render path — are catalogued in
+[docs/architecture.md](docs/architecture.md#sharp-edges) rather than hidden.
 
 ## Licence
 

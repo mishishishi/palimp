@@ -268,7 +268,7 @@ sequenceDiagram
 
     Note over D: getUser() → user.publishToken
     D->>A: getLatestRun(token)
-    A->>GH: GET /actions/workflows/{wf}/runs?per_page=1
+    A->>GH: GET …/runs?event=workflow_dispatch&per_page=1
     GH-->>D: latest run (or null) → icon state
 
     U->>D: click Publish
@@ -277,7 +277,7 @@ sequenceDiagram
     A->>GH: POST /actions/workflows/{wf}/dispatches
     GH-->>A: 204 No Content — no run id
     loop up to 6× at 1s
-        A->>GH: GET …/runs?per_page=5
+        A->>GH: GET …/runs?event=workflow_dispatch&per_page=5
         GH-->>A: runs
         Note over A: first run with<br/>created_at ≥ dispatchedAt − 5s
     end
@@ -295,13 +295,18 @@ Two GitHub API facts the adapter absorbs so `core` never sees them:
 1. **`POST /dispatches` returns 204 with no body.** There is no run id to follow. So the adapter
    timestamps the moment before the POST and then polls the runs list for the first run created
    at or after that instant, with 5 s of clock-skew tolerance. Six attempts, one second apart.
-2. **Run identity is by recency, not id.** `getLatestRun` just reads the newest run of that
-   workflow. No id is stored anywhere, which is exactly why reload works with no client-side
-   persistence.
+2. **Run identity is by recency, not id.** `getLatestRun` just reads the newest
+   `workflow_dispatch` run of that workflow. No id is stored anywhere, which is exactly why
+   reload works with no client-side persistence.
 
-Matching by dispatch time is a heuristic. Two publishes within the tolerance window, or a push
-landing at the same moment, and the drawer follows the wrong run — it will still be a run of the
-right workflow, so the failure is cosmetic.
+Both queries filter on `event=workflow_dispatch`, which keeps push- and PR-triggered runs of the
+same workflow out of the drawer — necessary here, since the deploy workflow is also the publish
+target. The trade is that a push-triggered deploy republishes the site without the drawer ever
+showing it.
+
+Matching by dispatch time is a heuristic. Two publishes inside the tolerance window and the
+drawer follows the wrong one — it will still be a dispatch of the right workflow, so the failure
+is cosmetic.
 
 ## Sessions and false positives
 
@@ -393,8 +398,7 @@ Documented, not fixed. Each is a real behaviour of the code as it stands.
 | **No tests** | The root `test` script is `echo "Error: no test specified" && exit 1`. `check-types` is the only automated gate. |
 | **`XcoreClientComponent`** | A previous project identity, still in the render path — and `fe-next` also exports `palimp as xcore`. Both are in the public surface, so renaming them is a breaking change. |
 | **Stale-session hang** | See [above](#sessions-and-false-positives). The Devtools drawer spins forever rather than reporting the failure. |
-| **Publish sees non-publish runs** | The adapter queries `…/runs?per_page=N` without `event=workflow_dispatch`, so *any* run of that workflow counts as the latest publish. |
-| **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`. Combined with the row above, every push to `main` shows up in the drawer as a publish and disables the button while it runs. Sound in intent — the deploy *is* the publish — but it means Palimp cannot distinguish its own dispatches from ordinary CI. |
+| **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`, and that workflow also fires on `push` and `pull_request`. Sound in intent — the deploy *is* the publish — but the drawer only tracks `workflow_dispatch` runs, so a deploy triggered by a push republishes the site without ever appearing there. |
 | **Silent no-op without a publish provider** | `PalimpPublishContext` holds `null` under a non-nullable type. If a user has a `publishToken` but no `PalimpGithubPublishProvider` is mounted, the button renders enabled and clicking does nothing. |
 | **Shared query client** | `core`'s `queryClient` is a module singleton, and `logout()` calls `invalidateQueries()` with no key — invalidating every query in it, Palimp's or not. |
 | **Dead input branch** | `p()` always passes `textarea`, so `EditComponent`'s `<input>` branch is unreachable through `fe-next`. |

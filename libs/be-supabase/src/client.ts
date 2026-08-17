@@ -1,5 +1,5 @@
 import type { PalimpClientBackendAdapter } from "@palimp/core";
-import { SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const createClientAdapter = (
   url: string,
@@ -8,6 +8,8 @@ export const createClientAdapter = (
   let supabase: SupabaseClient = null!;
 
   const ensureSupabase = async () => {
+    if (supabase) return;
+
     const m = await import("@supabase/ssr");
 
     supabase = m.createBrowserClient(url, key);

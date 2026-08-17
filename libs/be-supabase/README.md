@@ -149,17 +149,11 @@ Returns `false` during SSR (`typeof document === "undefined"`).
 
 ## Quirks
 
-**`ensureSupabase()` doesn't memoize.** Every adapter call runs
-`createBrowserClient(url, key)` again — there is no `if (supabase) return` guard, unlike
-[be-firebase's `ensureFirebase()`](../be-firebase/src/client.ts). Cheap but wasteful, and it
-means the adapter holds no stable client instance.
-
-**`@supabase/supabase-js` is a runtime import but only a devDependency.**
-[src/client.ts:2](src/client.ts) writes `import { SupabaseClient } from "@supabase/supabase-js"`
-without the `type` modifier, and the package builds with `verbatimModuleSyntax`, so the import
-survives into `dist/client.js` even though the binding is used purely as a type annotation. It
-resolves in practice — `@supabase/ssr` depends on `supabase-js` — but nothing declares it. Adding
-`type` to that import would drop it from the output and close the gap.
+**`@supabase/supabase-js` is types-only.** [src/client.ts](src/client.ts) imports
+`SupabaseClient` with `import type`, so the reference is erased at build time and never reaches
+`dist/`. That is why the package can list it as a devDependency: it is needed to typecheck, not
+to run. `verbatimModuleSyntax` is on, so dropping the `type` modifier would silently turn it into
+a real runtime dependency that nothing declares.
 
 **The server adapter uses raw `fetch`, not the SDK.** `loadMessages()` hits PostgREST directly
 with `apikey` and `Authorization` headers. No SDK to initialise, which keeps the server entry

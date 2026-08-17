@@ -53,8 +53,9 @@ Follow what's already in the file you're editing. Across the codebase:
   `<Context value={…}>` rather than `<Context.Provider value={…}>`. Don't reintroduce the older
   spellings.
 - **`import type` is mandatory** for type-only imports — `verbatimModuleSyntax` is on, so an
-  import without it survives into the emitted JS and becomes a real runtime dependency.
-  ([be-supabase/src/client.ts:2](libs/be-supabase/src/client.ts) is the cautionary example.)
+  import without it survives into the emitted JS and becomes a real runtime dependency, even when
+  the binding is only ever used in a type position. This bites hardest in the backend adapters,
+  where the SDK is a devDependency and the emitted import would resolve only by accident.
 - **Relative imports are inconsistent** about `.ts`/`.tsx` extensions; both forms compile
   (`allowImportingTsExtensions` + `rewriteRelativeImportExtensions`). Match the file you're in.
 - **`null!`** is the house style for context defaults and lazily-initialised module locals.
