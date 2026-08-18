@@ -1,6 +1,7 @@
 # Adopting palimp in a real host — nano-pro-web
 
-**Status:** proposed, nothing built · **Date:** 2026-08-18
+**Status:** proposed · **Date:** 2026-08-18 · §D landed 2026-08-18; A, B, B2, C and E unbuilt —
+see the [divergence note](#divergence-note--d-as-built-2026-08-18). Body kept as written.
 
 The first host that is not an example. `nano-pro-web` (local repo, Next 16.2, React 19.2, App
 Router, `en`/`cs`) has palimp on its roadmap as phase 15 and has already read this codebase once:
@@ -368,3 +369,56 @@ touches zero files in `core`. Nothing here weakens it.
   `PalimpFields`, consuming outside the monorepo
 - `docs/architecture.md` — `asString` and `PalimpFields` in the contracts and render sections;
   strike the two fixed sharp edges
+
+---
+
+## Divergence note — §D as built, 2026-08-18
+
+§D landed first, as the only section blocking the host. Sections A, B, B2, C and E remain
+unbuilt; nothing below applies to them.
+
+**Versioning: lockstep, as recommended in "Settle these during implementation" item 1.** All five
+packages carry one version and ship together. `pack:all` does not merely follow the convention, it
+enforces it — a set whose versions have drifted fails *before* the build, so the slip costs a
+second rather than a minute. Independent semver stays available if a second consumer ever makes
+the bookkeeping worth it. Versions stayed at `1.0.0`: §D changes no public surface, and the bump
+belongs to the commit that lands §B.
+
+Lockstep leaves a gap the plan named but did not close — the same version gets packed from
+different commits while pre-1.0, so the version alone still does not answer "which build is in the
+host?". Each run therefore writes **`palimp-manifest.json`** beside the tarballs, recording the
+version, commit and whether the tree was dirty. Committed alongside the tarballs, it answers the
+question. Not in the plan; added because the plan's stated reason for versioning at all was that
+question.
+
+**Five packages, not four.** The plan says "one or both backends". The script packs everything
+under `libs/` unconditionally and the host takes what it needs — a `--backend` flag would be
+configuration standing in for a copy-paste choice the host makes anyway.
+
+**One flag the plan did not have: `--verify-only <dir>`.** The plan's verification step 11 asks to
+hand-edit a tarball back to `workspace:*` and confirm the assertion catches it. That is not
+runnable as written — every invocation repacks over the tampered file. `--verify-only` runs the
+assertions against tarballs already on disk, which makes step 11 executable and, incidentally, lets
+a host verify a `vendor/` directory it did not produce.
+
+**`link:` fails later than expected, and the plan's stated reason is wrong.** The plan rejects
+`link:` partly because it "hits the `workspace:*` peer failure". It does not: `pnpm install`
+succeeds with no warning. The failure is at import — a symlinked package resolves its own peers
+(`next`, `react`, `@palimp/core`) from *this* repo's `node_modules`, where `next` exists only under
+`examples/`. Verified: `ERR_MODULE_NOT_FOUND` for `next/dynamic` inside `libs/fe-next/`. The
+conclusion holds and the README documents it, but as an import-time trap rather than an install-time
+one — which matters, because an install that succeeds is the more expensive kind of wrong. The
+replacement dev loop is re-running `pack:all --out ../host/vendor` and `pnpm install`; the filename
+is unchanged but the content hash is not, so pnpm picks it up (verified).
+
+**One assertion beyond the plan's six:** every target in each packed `exports` map must exist in
+the tarball. The plan's build-first rule exists to prevent a tarball that installs and then fails
+at import; this is the check that would actually catch it, and it makes `pnpm build`'s
+"`dist/` still matches its `exports` map" gate true of the shipped artifact rather than the tree.
+
+**Verification run:** steps 1 and 11. `check-types` and `build` clean. The five tarballs installed
+into a scratch Next 16 app outside the monorepo: install resolved with no peer warnings, the
+lockfile pinned each by sha512, a file importing all four packages' entry points typechecked with
+`skipLibCheck: false`, and a runtime `import()` across the tarball boundary resolved. Three
+deliberate breaks each failed with the intended message and exit 1 — `workspace:*` restored by
+hand, a `dist/` file deleted from a tarball, and one source `version` bumped out of lockstep.
