@@ -85,7 +85,9 @@ them before the first `p()` call. A per-key server API would mean one round trip
 
 The consequence is that this interface does not scale to a large message set — the whole table
 is read for every page render. That is a deliberate trade for a repo whose message count is in
-the dozens.
+the dozens. `fe-next` wraps the call in React `cache()`, which caps it at one read per render
+however many times `palimp()` is called — `generateMetadata` and the page body share it — but
+does nothing about the size of the read.
 
 ### `PalimpClientBackendAdapter` — auth, per-key read, batched write
 
@@ -241,6 +243,11 @@ Points worth knowing:
   `loaded ?? options.defaultMessage ?? key` — a key with no row in the database and no
   `defaultMessage` renders as its own key, which makes missing content obvious rather than blank.
   In the editor it is the last link of a second chain, `pending ?? data ?? staleValue ?? ""`.
+- **`p(key, { asString: true })` returns the same resolved string instead of an element**, for
+  `metadata`, `alt`, `aria-label` and anything else typed `string`. It is the identical chain, just
+  without the wrapper — which is also its limitation: no element means no editor, and no
+  client-side re-read, so an `asString` value is fixed until the next build. See
+  [fe-next's README](../libs/fe-next/README.md#quirks).
 - **Nothing admin-only ships to visitors.** `EditComponent` and `Devtools` are both behind
   `next/dynamic` imports of `@palimp/core/admin`, so antd, react-query, and lucide stay out of
   the visitor bundle. This is why `core` has a separate `./admin` export.
@@ -366,7 +373,10 @@ The bet has been re-tested twice more, with an honest result each time:
 The cost is visible in the wiring. A host app mounts four nested providers in a fixed order —
 backend, publish, `PalimpProvider`, page — plus a module-level `setBackendAdapter()` call for the
 server side, because a server component can't reach React context. See
-[examples/supabase-next/app/layout.tsx](../examples/supabase-next/app/layout.tsx).
+[examples/supabase-next/app/layout.tsx](../examples/supabase-next/app/layout.tsx) and
+[app/palimp.ts](../examples/supabase-next/app/palimp.ts), which is where the registration lives:
+a page's `generateMetadata` is not guaranteed to run after the layout module, so the module that
+hands out `palimp` is the one that registers the adapter.
 
 ## Security posture
 
