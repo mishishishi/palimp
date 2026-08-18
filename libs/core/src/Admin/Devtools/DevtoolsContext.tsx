@@ -7,6 +7,7 @@ import { PalimpGeneralContext } from "../../PalimpGeneralContext";
 import type { User } from "../../types";
 import { queryClient } from "../queryClient";
 import { Spinner } from "../Spinner";
+import { DevtoolsSessionError } from "./DevtoolsSessionError";
 
 interface IDevtoolsContext {
   user: User;
@@ -29,10 +30,6 @@ export const DevtoolsProvider = (props: { children: ReactNode }) => {
     queryClient,
   );
 
-  if (user.error) {
-    console.error(user.error);
-  }
-
   const value = useMemo(
     () =>
       user.data && {
@@ -51,9 +48,17 @@ export const DevtoolsProvider = (props: { children: ReactNode }) => {
     [user.data],
   );
 
-  return value ? (
-    <DevtoolsContext value={value}>{props.children}</DevtoolsContext>
-  ) : (
-    <Spinner />
-  );
+  if (value) {
+    return <DevtoolsContext value={value}>{props.children}</DevtoolsContext>;
+  }
+
+  // `hasSession()` only sniffs a cookie or a localStorage flag, so it can put an
+  // admin here with a session the server has already dropped. Rendering the
+  // spinner and logging to the console left a non-technical client with no way
+  // out; the error state has one.
+  if (user.error) {
+    return <DevtoolsSessionError error={user.error} />;
+  }
+
+  return <Spinner />;
 };

@@ -135,11 +135,12 @@ const prefix = `sb-${ref}-auth-token`;
 
 Two consequences:
 
-- **False positives.** The cookie can outlive the session it describes, in which case `admin`
-  goes true, `getUser()` then rejects, and the Devtools drawer spins indefinitely. Same class of
-  bug as the Firebase adapter's `localStorage` flag, but with no self-correction — the Firebase
-  adapter at least clears its flag when `getUser()` finds nobody. Clearing the cookie is the way
-  out. See
+- **False positives.** The cookie can outlive the session it describes, in which case `admin` goes
+  true and `getUser()` then rejects. The drawer reports that and offers a **Sign out** button that
+  clears the cookie. `getUser()` also corrects the hint itself: finding no user, it calls
+  `signOut()` — which is what removes the cookie, since the cookie is chunked and deleting it by
+  hand is unreliable. It skips that on `AuthRetryableFetchError`, because a failed fetch is not
+  evidence the session is gone and an offline reload should not sign the admin out. See
   [Sessions and false positives](../../docs/architecture.md#sessions-and-false-positives).
 - **Custom domains break it.** The regex takes the first hostname label as the project ref, so it
   only works for `https://<ref>.supabase.co`. Point `url` at a custom domain and `hasSession()`

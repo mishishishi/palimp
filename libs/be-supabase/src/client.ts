@@ -47,11 +47,24 @@ export const createClientAdapter = (
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
-        throw userError;
-      }
-      if (!user) {
-        throw new Error("Not authenticated");
+      if (userError || !user) {
+        // Clear the cookie before throwing. `hasSession()` only sniffs for it,
+        // so one that outlives its session reports true on every reload — this
+        // is the correction path the Firebase adapter gets from
+        // `setSessionFlag(false)`. `signOut()` is what removes it (the cookie
+        // is chunked, so deleting it by hand is not reliable) and it ignores a
+        // 401/403 from a session the server has already dropped. A fetch
+        // failure is *not* evidence the session is gone, so an offline reload
+        // leaves the cookie alone rather than signing the admin out.
+        if (userError?.name !== "AuthRetryableFetchError") {
+          try {
+            await supabase.auth.signOut();
+          } catch {
+            // Ignore — the error thrown below is the one worth reporting.
+          }
+        }
+
+        throw userError ?? new Error("Not authenticated");
       }
 
       const { data: profile, error: profileError } = await supabase

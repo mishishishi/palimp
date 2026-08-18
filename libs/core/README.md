@@ -58,12 +58,17 @@ handed — it comes from the signed-in user's profile, not from adapter config, 
 import {
   PalimpGeneralContext,        // admin | preview | togglePreview | reset
   PalimpClientBackendContext,  // PalimpClientBackendAdapter
-  PalimpPublishContext,        // PalimpPublishAdapter
+  PalimpPublishContext,        // PalimpPublishAdapter | null
 } from "@palimp/core";
 ```
 
-All three are `createContext<T>(null!)` — non-nullable type, null default. Rendering an admin
-component outside its provider throws rather than degrading.
+The first two are `createContext<T>(null!)` — non-nullable type, null default. They are mandatory,
+so rendering an admin component outside their providers throws rather than degrading.
+
+`PalimpPublishContext` is `createContext<PalimpPublishAdapter | null>(null)`. Publishing is
+optional, so `null` is a real state consumers check: `usePublishButton` reports
+`available: !!adapter`, `usePublishRun` passes `skipToken`, and the drawer disables Publish with
+"No publish provider".
 
 `PalimpGeneralContext.admin` is `boolean | undefined`, and all three states are used:
 `undefined` means the session check hasn't run yet, so `LoginPageCore` shows a spinner instead
@@ -117,6 +122,12 @@ build-time snapshot the caller passed in. Under `preview` it renders as plain te
 The left-edge drawer: Save (with a pending count), preview toggle, Publish plus a status icon
 and detail modal, and the signed-in user with a logout button. Mounted by `PalimpProvider` when
 `admin` is true.
+
+`DevtoolsProvider` calls `getUser()` to fill the drawer. When that rejects — `hasSession()` reads
+an unvalidated cookie or flag, so it can report a session the server has already dropped — the
+drawer renders `DevtoolsSessionError` instead: the reason, the underlying message, and a **Sign
+out** button that calls `logout()` and then `reset()`. `logout()` is the recovery because it is
+the only adapter method that clears the hint `hasSession()` reads.
 
 ### `LoginPageCore`
 
