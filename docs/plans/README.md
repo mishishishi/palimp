@@ -20,6 +20,8 @@ For how the code behaves today:
 | [publish-status.md](publish-status.md) | run status icon + modal | Closest to current, but several details shipped differently — see the divergence note at the end of the file. |
 | [be-firebase.md](be-firebase.md) | `@palimp/be-firebase` | Landed essentially as written. Its "Files modified: None" claim held, which is the load-bearing evidence for the adapter design. |
 | [documentation.md](documentation.md) | this documentation set | Executed. |
+| [host-adoption.md](host-adoption.md) | — | **Proposed, nothing built.** First non-example host (`nano-pro-web`): `asString`, off-page field editing, distribution by tarball, and the sharp edges that block a non-technical editor. |
+| [nano-pro-web-phase-15.md](nano-pro-web-phase-15.md) | — | **Not a palimp plan.** The host-side companion to the above, in `nano-pro-web`'s own phase format, parked here for transfer to that repo. Its links resolve there, not here. |
 
 ## Adding a plan
 
