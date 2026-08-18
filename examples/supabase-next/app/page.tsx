@@ -1,4 +1,21 @@
-import { palimp } from "@palimp/fe-next";
+import { type Metadata } from "next";
+import { palimp } from "./palimp.ts";
+
+export const generateMetadata = async (): Promise<Metadata> => {
+  const { p } = await palimp();
+
+  return {
+    title: p("meta.title", {
+      defaultMessage: "Sunny Grove Bananas",
+      asString: true,
+    }),
+    description: p("meta.description", {
+      defaultMessage:
+        "A small independent farm growing rare and heritage bananas on the slopes of the Sierra Verde.",
+      asString: true,
+    }),
+  };
+};
 
 export default async function Page() {
   const { p } = await palimp();

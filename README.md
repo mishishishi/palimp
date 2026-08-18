@@ -20,6 +20,11 @@ Message values live in your own database. On the server they are loaded in bulk 
 ordinary text. In the browser, admins get an editor per string, a shared edit buffer, and a
 Devtools drawer that commits the whole batch at once.
 
+Where a string has to actually be a string — `metadata.title`, an `alt`, an `aria-label` —
+`p(key, { asString: true })` returns one instead of an element. Same key namespace, same fallback
+chain; the trade is that a key with no element on the page has no inline editor and only changes
+on publish.
+
 The examples build as static exports (`output: "export"`), so values are baked in at build time
 and a save changes nothing for the public until the site is rebuilt. That is what Publish does:
 dispatch the deploy workflow and follow the run. Admins see their edits immediately regardless,
@@ -83,10 +88,11 @@ Nothing is published to npm, so `pnpm add @palimp/core` resolves to nothing. Bui
 install those — see [consuming palimp outside the monorepo](#consuming-palimp-outside-the-monorepo)
 below.
 
-Once installed, copy [examples/supabase-next/app/layout.tsx](examples/supabase-next/app/layout.tsx)
-— it is the whole integration: one `setBackendAdapter()` call at module scope and three nested
-providers. [libs/fe-next/README.md](libs/fe-next/README.md#usage) explains each step and the
-ordering constraint.
+Once installed, copy [examples/supabase-next/app/palimp.ts](examples/supabase-next/app/palimp.ts)
+and [app/layout.tsx](examples/supabase-next/app/layout.tsx) — together they are the whole
+integration: one `setBackendAdapter()` call at module scope and three nested providers.
+[libs/fe-next/README.md](libs/fe-next/README.md#usage) explains each step and the ordering
+constraint.
 
 ## Consuming palimp outside the monorepo
 
@@ -102,10 +108,10 @@ Commit the tarballs to the host and depend on them by path:
 ```json
 {
   "dependencies": {
-    "@palimp/core": "file:./vendor/palimp-core-1.0.0.tgz",
-    "@palimp/fe-next": "file:./vendor/palimp-fe-next-1.0.0.tgz",
-    "@palimp/be-supabase": "file:./vendor/palimp-be-supabase-1.0.0.tgz",
-    "@palimp/publish-github": "file:./vendor/palimp-publish-github-1.0.0.tgz"
+    "@palimp/core": "file:./vendor/palimp-core-1.1.0.tgz",
+    "@palimp/fe-next": "file:./vendor/palimp-fe-next-1.1.0.tgz",
+    "@palimp/be-supabase": "file:./vendor/palimp-be-supabase-1.1.0.tgz",
+    "@palimp/publish-github": "file:./vendor/palimp-publish-github-1.1.0.tgz"
   }
 }
 ```

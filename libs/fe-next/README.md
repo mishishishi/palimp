@@ -8,17 +8,19 @@ This is the package a host app imports. It carries the framework-specific parts 
 
 ## Entry points
 
-- `@palimp/fe-next` — `palimp()`, `setBackendAdapter()`, `PalimpProvider`
+- `@palimp/fe-next` — `palimp()`, `setBackendAdapter()`, `PalimpProvider`,
+  `PalimpBackendAdapterUnsetError`, and the `PalimpP` type
 - `@palimp/fe-next/login` — `LoginPage`
 
 ## Usage
 
 ### 1. Register the server adapter
 
-Module-level, in `app/layout.tsx`, before anything renders:
+Module-level, in a module of your own that re-exports `palimp` — not in the layout body:
 
 ```tsx
-import { setBackendAdapter } from "@palimp/fe-next";
+// app/palimp.ts
+import { palimp, setBackendAdapter } from "@palimp/fe-next";
 import { createServerAdapter } from "@palimp/be-supabase/server";
 
 setBackendAdapter(
@@ -27,7 +29,20 @@ setBackendAdapter(
     process.env.SUPABASE_SECRET_KEY!,
   ),
 );
+
+export { palimp };
 ```
+
+Everything then imports `palimp` from `./palimp` rather than from the package, and the layout adds
+`import "./palimp";` for its own side effect. The registration is a module singleton, so whichever
+module runs first has to be the one that sets it — and **Next does not guarantee the layout is
+evaluated before a page's `generateMetadata`**. Nothing called the backend from metadata until
+[`asString`](#asstring--a-string-instead-of-an-element) existed; now it can, and a layout-body
+registration is a race. Registering in the module that hands out `palimp` removes the ordering
+question instead of documenting it.
+
+Calling `palimp()` with no adapter registered throws `PalimpBackendAdapterUnsetError` with that
+advice in the message.
 
 ### 2. Mount the providers
 
@@ -55,7 +70,7 @@ inert.
 ### 3. Wrap strings in a server component
 
 ```tsx
-import { palimp } from "@palimp/fe-next";
+import { palimp } from "./palimp";
 
 export default async function Page() {
   const { p } = await palimp();
@@ -69,11 +84,12 @@ export default async function Page() {
 }
 ```
 
-`p()` returns a React element, not a string — it cannot go in an attribute, a `title`, or a
-`metadata` export.
+`p()` returns a React element by default — it cannot go in an attribute, a `title`, or a
+`metadata` export. Pass `asString: true` when you need the string itself.
 
-The value resolves as `loaded ?? defaultMessage ?? key`. A key with neither a stored row nor a
-`defaultMessage` renders as its own key — missing content is visible rather than blank.
+The value resolves as `loaded ?? defaultMessage ?? key`, identically in both branches. A key with
+neither a stored row nor a `defaultMessage` renders as its own key — missing content is visible
+rather than blank.
 
 ### 4. Add the login route
 
@@ -85,6 +101,33 @@ import { LoginPage } from "@palimp/fe-next/login";
 
 export default LoginPage;
 ```
+
+### `asString` — a string instead of an element
+
+```tsx
+p("hero.title", { defaultMessage: "Bananas grown slowly." });                   // ReactNode
+p("hero.title", { defaultMessage: "Bananas grown slowly.", asString: true });   // string
+```
+
+One function, one key namespace. `p` is typed as `PalimpP`, an interface with two call signatures,
+so the return type follows the flag with no annotation at the call site. The obvious use is
+metadata:
+
+```tsx
+export const generateMetadata = async (): Promise<Metadata> => {
+  const { p } = await palimp();
+
+  return {
+    title: p("meta.title", { defaultMessage: "Sunny Grove", asString: true }),
+  };
+};
+```
+
+`generateMetadata` and the page body each call `palimp()`, but `loadMessages()` is wrapped in
+React's `cache()`, so the two share a single read per page render.
+
+Two asymmetries come with it, both permanent — see [Quirks](#quirks): `asString` has to be a
+literal `true`, and an `asString` value changes only on publish.
 
 ## What `PalimpProvider` does
 
@@ -105,16 +148,34 @@ back to `undefined` and thereby re-arms the session check. Login and logout both
 **`setBackendAdapter` is a module-level singleton.** A server component can't read React context,
 so the server adapter is stashed in a module variable that `palimp()` reads. Consequences:
 
-- Calling `palimp()` before `setBackendAdapter()` throws on `undefined`. Keep the call at module
-  scope in the root layout, not inside a component body.
+- Calling `palimp()` before `setBackendAdapter()` throws `PalimpBackendAdapterUnsetError`. Keep the
+  call at module scope in a module both the layout and every page reach — never inside a component
+  body. See [Register the server adapter](#1-register-the-server-adapter).
 - One server backend per process. Two backends in one app is not expressible.
 - Under `next dev` HMR the module can be re-evaluated; adapters guard against duplicate SDK
   initialisation for exactly this reason (see the comment in
   [be-firebase/src/server.ts](../be-firebase/src/server.ts)).
 
-**`palimp()` loads every message, on every render.** `loadMessages()` has no key filter and no
-cache. Fine for the dozens of strings the examples carry; a full table read per page render at
+**`palimp()` loads every message, once per render.** `loadMessages()` has no key filter, so the
+whole table is read; `cache()` caps that at one read per page render however many times `palimp()`
+is called. Fine for the dozens of strings the examples carry; a full table read per page render at
 larger scale.
+
+**`asString` must be a literal `true`.** A computed boolean —
+`p(key, { asString: someCondition })` — matches neither call signature. The error is TS2769 "No
+overload matches this call" listing both, and its last line — `Type 'boolean' is not assignable to
+type 'false'` — reads as if `false` were what was wanted. It isn't; a literal is. There is no use
+for a runtime-varying flag: pick the branch at the call site. `asString: false` is the same as
+omitting it.
+
+**`asString` values change only on publish — including for the admin.** They are resolved at build
+time and, unlike `p()`'s element branch, never re-read in the browser: a string has no component to
+hold a query. So an admin editing a page title sees the drawer count the edit and Save write it,
+while the `<title>` keeps the old value until the site is rebuilt. Inherent to the static-export
+premise, not fixable here.
+
+**An `asString` key renders no editor.** There is no element to put one in, so the key is editable
+only by someone who already knows it exists.
 
 **Admin code is loaded through `next/dynamic`, and must stay that way.** Both
 [ClientComponent.tsx](src/ClientComponent.tsx) and [PalimpProvider.tsx](src/PalimpProvider.tsx)

@@ -1,2 +1,8 @@
-export { palimp, setBackendAdapter, palimp as xcore } from "./palimp.tsx";
+export {
+  palimp,
+  PalimpBackendAdapterUnsetError,
+  setBackendAdapter,
+  palimp as xcore,
+} from "./palimp.tsx";
+export type { PalimpP } from "./palimp.tsx";
 export { PalimpProvider } from "./PalimpProvider.tsx";
