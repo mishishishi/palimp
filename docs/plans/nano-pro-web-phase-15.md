@@ -185,7 +185,7 @@ What it settles, and nothing more:
   the project ref out of the first hostname label, so a custom domain makes session detection
   return `false` forever and editing never activates — silently, with no error anywhere.
 - Step 2's four vendored tarballs are `palimp-core`, `palimp-fe-next`, `palimp-be-supabase` and
-  `palimp-publish-github`, at **1.2.0**. `pack:all` emits all five; the host takes these four and
+  `palimp-publish-github`, at **1.3.0**. `pack:all` emits all five; the host takes these four and
   ignores `palimp-be-firebase`.
 - Step 4 mounts `PalimpSupabaseProvider` from `@palimp/be-supabase/react`; step 3's seam module
   imports `createServerAdapter` from `@palimp/be-supabase/server`, whose signature is

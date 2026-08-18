@@ -1,19 +1,15 @@
+import { PalimpFields } from "@palimp/fe-next";
 import { type Metadata } from "next";
 import { palimp } from "./palimp.ts";
+import { asString, seoFields } from "./seo.ts";
 
 export const generateMetadata = async (): Promise<Metadata> => {
   const { p } = await palimp();
+  const [title, description] = seoFields;
 
   return {
-    title: p("meta.title", {
-      defaultMessage: "Sunny Grove Bananas",
-      asString: true,
-    }),
-    description: p("meta.description", {
-      defaultMessage:
-        "A small independent farm growing rare and heritage bananas on the slopes of the Sierra Verde.",
-      asString: true,
-    }),
+    title: asString(p, title),
+    description: asString(p, description),
   };
 };
 
@@ -167,6 +163,13 @@ export default async function Page() {
           </div>
         </dl>
       </section>
+
+      {/*
+        Renders nothing. It declares the two metadata keys above so they get an
+        editor in the Devtools "Fields" modal — an `asString` key has no element
+        on the page, so there is nowhere to put an inline one.
+      */}
+      <PalimpFields group="SEO" fields={seoFields} />
 
       <footer style={styles.footer}>
         <span>

@@ -14,8 +14,8 @@ Two, and the split matters — see [Quirks](#quirks).
 
 - `@palimp/core` — types, adapter interfaces, and the three React contexts. Cheap; no UI deps
   pulled in.
-- `@palimp/core/admin` — `EditComponent`, `Devtools`, `LoginPageCore`. Pulls in antd,
-  `@tanstack/react-query`, and lucide.
+- `@palimp/core/admin` — `EditComponent`, `Devtools`, `LoginPageCore`, `PalimpFields`. Pulls in
+  antd, `@tanstack/react-query`, and lucide.
 
 ## The contracts
 
@@ -119,9 +119,9 @@ build-time snapshot the caller passed in. Under `preview` it renders as plain te
 
 ### `Devtools`
 
-The left-edge drawer: Save (with a pending count), preview toggle, Publish plus a status icon
-and detail modal, and the signed-in user with a logout button. Mounted by `PalimpProvider` when
-`admin` is true.
+The left-edge drawer: Save (with a pending count), preview toggle, a **Fields** button opening the
+modal of off-page fields, Publish plus a status icon and detail modal, and the signed-in user with
+a logout button. Mounted by `PalimpProvider` when `admin` is true.
 
 `DevtoolsProvider` calls `getUser()` to fill the drawer. When that rejects — `hasSession()` reads
 an unvalidated cookie or flag, so it can report a session the server has already dropped — the
@@ -133,6 +133,25 @@ the only adapter method that clears the hint `hasSession()` reads.
 
 An antd email/password form. Takes one prop, `onLogin` — the framework binding supplies the
 navigation ([`fe-next`](../fe-next/README.md) pushes `/` and refreshes).
+
+### `PalimpFields`
+
+Registers a group of keys that are editable but not on the page — metadata read through
+`p(key, { asString: true })` is the motivating case, since it renders no element and so has
+nowhere to hold an inline editor. Takes `group` and `fields`, registers on mount, unregisters on
+unmount, and **renders `null`**.
+
+### `fieldsStore`
+
+The registry behind it, and a near-copy of `editsStore`: a `Map`, a `Set` of listeners, and a
+cached snapshot read through `useSyncExternalStore`. Keyed by registration id rather than by group,
+so two components declaring one group can each withdraw only their own fields. Groups are merged
+and keys deduped in `refresh()` — on write, not on read, because `useSyncExternalStore` needs a
+referentially stable snapshot and grouping during render would allocate a new array every time.
+
+This is a **placement** feature, not a second editor. The Devtools modal renders the ordinary
+`EditComponent` per field, so modal edits land in the same `editsStore`, the same badge count and
+the same `setKeys` batch as inline ones. The save path needed no changes.
 
 ### `editsStore`
 

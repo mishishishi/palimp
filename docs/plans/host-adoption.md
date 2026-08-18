@@ -1,9 +1,11 @@
 # Adopting palimp in a real host — nano-pro-web
 
-**Status:** proposed · **Date:** 2026-08-18 · §D, §B and §E items 1–2 landed 2026-08-18; A, B2, C
-and §E item 3 unbuilt — see the divergence notes for
-[§D](#divergence-note--d-as-built-2026-08-18), [§B](#divergence-note--b-as-built-2026-08-18) and
-[§E](#divergence-note--e-items-1-and-2-as-built-2026-08-18). Body kept as written.
+**Status:** proposed · **Date:** 2026-08-18 · §D, §B, §E items 1–2, §B2 and §A all landed
+2026-08-18; only §C and §E item 3 remain, and neither is a library change — see the divergence
+notes for [§D](#divergence-note--d-as-built-2026-08-18),
+[§B](#divergence-note--b-as-built-2026-08-18),
+[§E](#divergence-note--e-items-1-and-2-as-built-2026-08-18) and
+[§B2/§A](#divergence-note--b2-and-a-as-built-2026-08-18). Body kept as written.
 
 The first host that is not an example. `nano-pro-web` (local repo, Next 16.2, React 19.2, App
 Router, `en`/`cs`) has palimp on its roadmap as phase 15 and has already read this codebase once:
@@ -590,3 +592,104 @@ What *is* established without credentials: the code typechecks and builds, the n
 real in the emitted surface, and the `logout()`-clears-a-dead-session claim item 1 rests on was
 checked against the installed `auth-js` source rather than assumed. What is not: that the rendered
 drawer looks right at 192px, and that the recovery round trip actually terminates.
+
+---
+
+## Divergence note — §B2 and §A as built, 2026-08-18
+
+§B2 landed fourth, together with §A — which is documentation only, and which the host needs
+*before* it writes its first `p()` call rather than after. §C remains unbuilt (it is a host-side
+measurement, not a library change), as does §E item 3.
+
+**Versions: 1.2.0 → 1.3.0 across all five packages.** Additive: `PalimpFields` and the
+`PalimpField` type are new exports, nothing was removed or changed in shape.
+
+### §B2 — as the plan described it, with three things it did not say
+
+**The save path needed no changes, exactly as predicted.** `editsStore` being a module singleton
+is what makes a modal `EditComponent` feed the same pending map, the same badge count and the same
+`setKeys` batch as an inline one. Nothing in the save path was touched. This is the plan's central
+claim about §B2 and it held.
+
+**`fieldsStore` is keyed by registration id, not by group.** The plan says "a near-copy of
+`editsStore`", which is true of the shape but understates one difference: two `<PalimpFields>` can
+declare the same `group`, and each must be able to withdraw only its own fields on unmount. Keying
+by group would make the second registration clobber the first. Groups are merged — and keys
+deduped, first declaration winning the label — inside `refresh()`, on write rather than on read,
+for the same reason `editsStore` caches its snapshot: `useSyncExternalStore` needs referential
+stability, and grouping during render would allocate a fresh array every time.
+
+**Registration is an effect keyed on a serialised signature.** Hosts pass an inline array, so its
+identity changes every render and a naive `[group, fields]` dependency would re-register on each
+one. `JSON.stringify([group, fields])` is the dependency instead, with `useId()` supplying the
+registration id.
+
+**Resolved: the plan's open question about keys that are also on the page.** Allowed, and it works
+— both editors bind to one `editsStore` entry, so they save together. What the plan asked to
+confirm was that the two stay in sync *visually*, and that could not be confirmed without
+credentials. The mechanism is sound (`useEdit` subscribes both to the same key) but it is unwatched
+— see below.
+
+**The modal passes `textarea`, so the dead `<input>` branch stays dead.** Using the default would
+have revived it and retired a sharp edge, which was tempting. Rejected: `p()` passes `textarea`, a
+key can appear both inline and in the modal, and the two rendering differently for the same key is
+a worse outcome than one unreachable branch. The sharp edge stays in `architecture.md`.
+
+### The one finding the plan did not anticipate
+
+**`<PalimpFields>` renders nothing for a visitor, but its declarations ship in the RSC payload.**
+Verification item 6 asks to check "the DOM and the RSC payload, not just the screen", and the
+payload half fails. In a real static export the DOM contains no trace and no admin code loads —
+but `out/index.html` carries, inside a `self.__next_f.push` script:
+
+```
+13:["$","$L15",null,{"group":"SEO","fields":[{"key":"meta.title","label":"Page title", …}]}]
+```
+
+It is a client component taking props from a server component, so RSC serialises the props whether
+or not it renders. The `admin` check happens in the browser, after the server has already
+rendered — the same structural wall §C names when it rejects "have `p()` return a plain string for
+visitors".
+
+Nothing new *in kind*: the same payload already carries `{"messageKey":"visit.phone.value",
+"staleValue":"+00 555 0142"}` for every `p()` on the page, which is §C's "the string ships twice".
+But the plan's "visitors get nothing" is too strong, and it is now a documented quirk in
+fe-next's README rather than a claim.
+
+### §A — documented, not coded, as specified
+
+In [fe-next's README](../../libs/fe-next/README.md): keep the host's typed dictionary, pass its
+value as `defaultMessage`, let palimp rows be overrides, and prefix locales into the key rather
+than adding a locale field. Written where a host reads usage, and stated as a prohibition
+("do not migrate the dictionary into the database") because the plan's reason for writing it down
+at all was that the obvious alternative is irreversible.
+
+### Verification — what was and was not run
+
+**Run and clean:** `pnpm check-types` and `pnpm build`, plus a `tsc --noEmit` of the Supabase
+example, which now demonstrates the intended host pattern end to end (`app/seo.ts` declares the
+array; `generateMetadata` maps it through `p` via an `asString` helper typed on `PalimpP`; the page
+body passes the same array to `<PalimpFields>`).
+
+**Item 6, run against a real static export** with §B's stub server adapter — the one §B2 item that
+needs no credentials, because it is a build-time question:
+
+- DOM: no editor markup, no `<input>`/`<textarea>` anywhere in `out/index.html` for a visitor.
+- Bundle: of the nine chunks `index.html` loads eagerly, none contains antd, lucide or the fields
+  code. All three live in one lazy chunk (`0ncb0gj983zs5.js`) that a visitor never fetches. The
+  grep was proved non-vacuous by confirming it *does* match that chunk.
+- Payload: **fails** — see the finding above.
+- Also confirmed still true after §B2: `loadMessages()` ran exactly once, and `<title>` carried the
+  stored row.
+
+**Not run — items 7 and 8**, and the visual half of the open question above. All need a real
+signed-in admin session:
+
+- item 7 — edit a field in the modal; the drawer badge counts it, Save writes it in the same batch
+  as an inline edit, and a failed save keeps it pending;
+- item 8 — unmount a `<PalimpFields>` and confirm its fields leave the modal while any pending edit
+  for those keys survives in `editsStore`.
+
+The mechanism for both is `editsStore`, which §B2 did not touch and which the drawer has always
+exercised — but "the code path is unchanged" is an argument, not a run. Nothing in the Fields modal
+has been seen rendering.
