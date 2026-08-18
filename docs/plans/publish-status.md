@@ -1,5 +1,13 @@
 # Plan: publish status indicator + run details modal
 
+> **Historical design record — not current API.** Written before this feature was built and kept
+> as written. For how the code behaves today see
+> [libs/publish-github/README.md](../../libs/publish-github/README.md) and
+> [../architecture.md](../architecture.md#publish). Context: [README.md](README.md).
+>
+> This is the closest plan to current behaviour, but several details shipped differently — see
+> the divergence note at the end.
+
 ## Context
 
 `@palimp/publish-github` currently fires a `workflow_dispatch` and forgets about it (`libs/publish-github/src/client.ts:14`). The Publish button (`libs/core/src/Admin/Devtools/DevtoolsContent.tsx`) goes from `"Publish"` → `"Publishing..."` only while the POST is in flight (usually <500ms), then snaps back. The user has no idea whether the Action actually succeeded.
@@ -270,3 +278,22 @@ No public-API breakages outside the workspace (the `PalimpPublishAdapter` shape 
 - Backoff / retry on transient 5xx during polling. react-query's default retry behaviour is fine.
 - Cancelling an in-flight run from the modal.
 - A "fade after N hours" idle state on the addon.
+
+## Divergence from what shipped
+
+Added after the fact. The plan is unedited above.
+
+- **~~No `event=workflow_dispatch` filter.~~ Since fixed.** Both queries were specified with it,
+  but the original `runsUrl` shipped as just `…/runs?per_page=N`, so any run of the workflow —
+  including the push- and PR-triggered ones the deploy workflows also fire on — counted as the
+  latest publish. The filter was added later, bringing the code back in line with this plan; see
+  [the quirk write-up](../../libs/publish-github/README.md#quirks).
+- **Polling is every 10 s, not 3 s** (`usePublishRun.ts`).
+- **`usePublishButton` has no `if (!adapter)` early return.** `available` is hardcoded `true`,
+  and the missing-provider case is handled only by an early return inside `mutationFn` — a silent
+  no-op rather than a disabled button.
+- **`PublishStatusModal` takes no `run` prop.** It calls `usePublishRun()` itself; react-query
+  dedupes against the same query key, so the data is shared without threading it through.
+- Everything else — the 204/no-run-id polling with 5 s tolerance, the status and conclusion
+  mapping tables, GitHub-as-the-store with no client-side persistence, the icon set, the modal
+  rows — shipped as described.
