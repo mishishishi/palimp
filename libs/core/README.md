@@ -173,6 +173,33 @@ they use antd themselves. The mitigation is the entry-point split: `fe-next` rea
 only through `next/dynamic`, so visitors never download any of it. Keep it that way — a static
 `import … from "@palimp/core/admin"` anywhere in a render path undoes the whole arrangement.
 
+**The interaction guard swallows events, page-wide.** While any `EditComponent` is mounted,
+[src/Admin/interactionGuard.ts](src/Admin/interactionGuard.ts) holds capture-phase listeners on
+`window` for `pointerdown`, `mousedown`, `mouseup`, `pointerup`, `touchstart`, `click`,
+`auxclick`, `dblclick`, `contextmenu`, `keydown`, `keyup`, `keypress` and `dragstart`. Any of
+those originating inside `[data-palimp-editor]` is stopped there and **never reaches a host
+listener** — not one attached with `addEventListener`, not a React one, not a document-level
+hotkey. That is the point (a nested `<a>` must not navigate when the admin clicks to type), but
+the blast radius is the whole document, not the ancestor chain: a global "Escape closes the
+modal" handler goes quiet whenever the caret is in an editor. Preview mode removes the editors
+and with them the guard's targets, which makes it the escape hatch. Palimp's own Devtools are
+subject to it: in the **Fields** modal, Escape with the caret in a field no longer closes the
+modal, because antd's key handler sits below `window` like every other one. Click outside, or
+the close button.
+
+Two consequences worth knowing before touching it. A click that *starts* in an editor and ends
+outside is suppressed too — that is a drag-select, and its `click` is dispatched at the common
+ancestor. And because window-capture is above React's root container, the guard would stop the
+editor's own handlers as well; it works only because the sole live one is `onChange` → the
+native `input` event, which is deliberately not guarded. Same for `beforeinput`,
+`compositionstart/end`, `focus` and `blur`.
+
+**Editors have no form owner.** Both branches carry `form="palimp-detached"`, which names no
+element, and per the HTML form-owner algorithm that leaves the control owned by *no* form rather
+than by the nearest ancestor one. So a host `form.reset()` cannot wipe a pending edit behind
+`editsStore`'s back, `form.elements` does not grow, and constraint validation does not see an
+unnamed field.
+
 **Shared `QueryClient`.** [src/Admin/queryClient.ts](src/Admin/queryClient.ts) exports a module
 singleton, and every hook passes it explicitly, so Palimp works without a `QueryClientProvider`
 in the host app and never touches the host's own client. The cost: `logout()` calls
