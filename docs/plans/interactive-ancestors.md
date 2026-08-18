@@ -176,3 +176,23 @@ change verified on types alone.
 - [libs/fe-next/README.md](../../libs/fe-next/README.md) — quirks: nested-interactive guidance and
   the `asString` + `PalimpFields` route from §D, which is the part a host author needs before they
   write the markup rather than after.
+
+## Divergences, as landed (2026-08-18)
+
+§A, §A2, §A3, §B and §C landed as written. Four notes on where the code is narrower or wider than
+the text above:
+
+- **§A4 was not implemented.** The Alt+click passthrough stays deferred — it adds an interaction
+  that wants its own decision. Preview mode is the escape hatch, as the section itself proposes.
+- **The press flag is set on `mousedown` as well as `pointerdown`** (§A, row 4). The text says
+  "the last `pointerdown`"; setting it on both is idempotent and keeps the flag correct where
+  pointer events are absent or a host cancels the pointerdown.
+- **The Enter rule covers `keypress` as well as `keydown`.** Implicit submission can be driven by
+  either, and the table's prevent column ("Enter on `<input>` only") spans the whole key row.
+- **§C also protects the `input` branch**, which the section did not name explicitly:
+  `form="palimp-detached"` is on both controls, since the branch is exported even though `p()`
+  never reaches it.
+
+The guard is exported as `retainInteractionGuard()` — it installs on first hold, returns the
+release, and uninstalls on the last — and is *not* re-exported from `Admin/index.ts`. It is an
+implementation detail of `EditComponent`, not public surface.

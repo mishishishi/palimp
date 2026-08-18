@@ -7,7 +7,10 @@ import { use } from "react";
 const Edit = dynamic(
   () => import("@palimp/core/admin").then((m) => m.EditComponent),
   {
-    loading: () => <span>...</span>,
+    // `data-palimp-editor` is what core's interaction guard selects on. The
+    // placeholder carries it so a click landing in the dynamic-import window
+    // does not reach an interactive ancestor either.
+    loading: () => <span data-palimp-editor="">...</span>,
   },
 );
 
