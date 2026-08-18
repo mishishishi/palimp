@@ -166,3 +166,36 @@ Edit: `package.json` · `src/app/[locale]/layout.tsx` · `src/app/[locale]/techn
       palimp bug, not a wiring one; report it there
 - [ ] `pnpm measure` delta recorded in this file
 - [ ] `roadmap.md` updated, `sessions/LOG.md` appended (≤8 lines)
+
+---
+
+## Decision note — backend chosen, 2026-08-18
+
+**Supabase.** Answered by the user, closing the first row of
+[Decisions to make](#decisions-to-make). The table is left as written — it records what was open at
+the time, which is the point of these files.
+
+What it settles, and nothing more:
+
+- Step 1 stands up a Supabase project. Follow palimp's [setup.md](../setup.md) **Track A**, which
+  ends at a filled `.env.local` and a working login: `NEXT_PUBLIC_SUPABASE_URL`,
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`. The `profiles` and `inline` tables,
+  the RLS policies, the editor account and **the profile row** are all in that track.
+- The URL must be the `https://<ref>.supabase.co` one, not a custom domain. `hasSession()` regexes
+  the project ref out of the first hostname label, so a custom domain makes session detection
+  return `false` forever and editing never activates — silently, with no error anywhere.
+- Step 2's four vendored tarballs are `palimp-core`, `palimp-fe-next`, `palimp-be-supabase` and
+  `palimp-publish-github`, at **1.2.0**. `pack:all` emits all five; the host takes these four and
+  ignores `palimp-be-firebase`.
+- Step 4 mounts `PalimpSupabaseProvider` from `@palimp/be-supabase/react`; step 3's seam module
+  imports `createServerAdapter` from `@palimp/be-supabase/server`, whose signature is
+  `(url, secretKey)` positional — not the object form Firebase takes.
+- Step 9's CI credentials are the three env vars above. Only `SUPABASE_SECRET_KEY` is a secret;
+  the other two are already public by design.
+
+The governing difference behind the choice was Postgres RLS versus Firestore rules. Nothing about
+it changes palimp: both adapters remain complete and supported, and the examples for both stay in
+the repo.
+
+**Still open from that table:** whether `/login` enters `ROUTES`, one editor account or several,
+and how much of `/technology` lands in 15a. None of them are blocked by this.

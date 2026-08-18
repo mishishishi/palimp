@@ -107,9 +107,9 @@ successful `login()` / `logout()` / `getUser()`.
 
 The flag may briefly report `true` for a session that expired between page loads — corrected on
 the next `getUser()` call, which clears it when no user is present. Same false-positive class as
-the Supabase cookie sniff, but self-correcting where that one isn't. While it is wrong, the
-Devtools drawer shows a spinner rather than an error; see
-[Sessions and false positives](../../docs/architecture.md#sessions-and-false-positives).
+the Supabase cookie sniff, which now corrects itself too, via `signOut()`. While the flag is
+wrong, the Devtools drawer reports the failure and offers a **Sign out** button that clears it;
+see [Sessions and false positives](../../docs/architecture.md#sessions-and-false-positives).
 
 Returns `false` during SSR (`typeof localStorage === "undefined"`).
 
