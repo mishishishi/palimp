@@ -7,7 +7,8 @@
     "build": "pnpm -r --filter './libs/*' build",
     "dev": "pnpm -r --parallel --filter './libs/*' dev",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "check-types": "pnpm -r --parallel --filter './libs/*' check-types"
+    "check-types": "pnpm -r --parallel --filter './libs/*' check-types",
+    "pack:all": "node scripts/pack.mjs"
   },
   "keywords": [],
   "author": "",
