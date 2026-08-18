@@ -1,7 +1,8 @@
 # Adopting palimp in a real host — nano-pro-web
 
-**Status:** proposed · **Date:** 2026-08-18 · §D landed 2026-08-18; A, B, B2, C and E unbuilt —
-see the [divergence note](#divergence-note--d-as-built-2026-08-18). Body kept as written.
+**Status:** proposed · **Date:** 2026-08-18 · §D and §B landed 2026-08-18; A, B2, C and E unbuilt
+— see the divergence notes for [§D](#divergence-note--d-as-built-2026-08-18) and
+[§B](#divergence-note--b-as-built-2026-08-18). Body kept as written.
 
 The first host that is not an example. `nano-pro-web` (local repo, Next 16.2, React 19.2, App
 Router, `en`/`cs`) has palimp on its roadmap as phase 15 and has already read this codebase once:
@@ -422,3 +423,75 @@ lockfile pinned each by sha512, a file importing all four packages' entry points
 `skipLibCheck: false`, and a runtime `import()` across the tarball boundary resolved. Three
 deliberate breaks each failed with the intended message and exit 1 — `workspace:*` restored by
 hand, a `dist/` file deleted from a tarball, and one source `version` bumped out of lockstep.
+
+---
+
+## Divergence note — §B as built, 2026-08-18
+
+§B landed second. Sections A, B2, C and E remain unbuilt; nothing below applies to them. Zero files
+in `libs/core` changed, as the section predicted — the whole of §B is 30 lines of
+[fe-next/src/palimp.tsx](../../libs/fe-next/src/palimp.tsx) plus the examples and the docs.
+
+**Versions: 1.0.0 → 1.1.0 across all five packages**, in this commit, which is the thread §D left
+open. Additive: `asString` is optional, both existing call shapes keep their existing types, and no
+export was removed.
+
+**The overloads are declared once, and the implementation is asserted into them.** The plan shows
+an `interface P`; that is what shipped, as an exported `PalimpP`, so a host can type a helper that
+takes `p` — the §B2 pattern of mapping one field array through `p` in `generateMetadata` wants a
+name for it. What the plan does not mention is that an implementation whose body returns
+`string | ReactNode` is **not assignable** to that interface: TypeScript checks the source against
+*every* target signature, and `string | Element` does not satisfy the `: string` one. Two ways out
+— repeat the signatures as overloads on a `function` declaration, or assert. Assertion, because the
+overload-implementation gap is unchecked either way (neither form verifies that `asString: true`
+really returns the string), and duplicating the signatures within twenty lines of the interface
+would read as an accident. The assertion carries a comment saying exactly that.
+
+**`asString` must be a literal `true` — confirmed, and the error is mildly better than the plan
+feared.** `{ asString: someCondition }` produces TS2769 "No overload matches this call", which then
+lists *both* overloads: `Type 'boolean' is not assignable to type 'true'` and, last and therefore
+most visible, `… not assignable to type 'false'`. It does name the flag, so it is not unrelated;
+what misleads is the final line, which reads as if `false` were the required value. Documented in
+the README as the plan asked.
+
+**The named error is a class, `PalimpBackendAdapterUnsetError`, exported.** The plan says "a named
+error"; a class gives the name in the build log — `Error [PalimpBackendAdapterUnsetError]: …` —
+and lets a host distinguish it from a backend failure. Its message states the fix rather than the
+fact, since the fix is the non-obvious half.
+
+**Registration moved further than "a shared module".** The plan asks for `setBackendAdapter()` in a
+module imported by both the layout and any page reading metadata. A bare side-effect import is
+still forgettable — the page that forgets it is exactly the page that broke. So the shared module
+also **re-exports `palimp`**, and pages import `palimp` from `./palimp.ts` rather than from
+`@palimp/fe-next`. Getting `p` at all now requires having run the registration. The layout keeps a
+side-effect import of the same module. Both examples were updated and both grew a `generateMetadata`
+using `asString`, which is what made verification items 4 and 5 runnable.
+
+**Verification run: items 1–5, all five, no credentials needed.** `check-types` and `build` clean.
+Items 2, 4 and 5 were run against a real `next build` of the Supabase example with a **stub server
+adapter** — a counting `loadMessages()` returning two known rows. That exercises real RSC `cache()`,
+real `generateMetadata` ordering and the real static export, and it needs no database, which the
+plan assumed it would. Results:
+
+- `<title>STORED TITLE FROM DB</title>` in `out/index.html` on a cold build — the stored row, via
+  `asString` from `generateMetadata`.
+- All three fallback cases in the string branch, in one build: stored row → the row; default only →
+  the default (`meta.description`); neither → the key itself (`<meta name="keywords"
+  content="meta.absent">`). The element branch resolved identically for the same page's keys.
+- **`loadMessages()` ran exactly once** with both `generateMetadata` and the body calling in —
+  `[stub] loadMessages call #1`, and nothing else. Counted, not inferred. Control: the same build
+  with `cache()` stripped from `dist/` logged calls #1 *and* #2, so the dedupe is `cache()`'s doing
+  and not an accident of the build.
+- Item 3, both overloads inferring with no annotation, was checked by typechecking a throwaway file
+  against the emitted `.d.ts` with `@ts-expect-error` on the two cases that must fail (a `string`
+  annotation on the element branch, and a computed `asString`). Both errored; the positive cases
+  did not. The file was deleted — there is no test harness here to keep it in.
+
+The two behaviours §B creates are documented, not fixed: an `asString` key renders no editor (§B2),
+and its value changes only on publish, including for the admin (inherent). Both are in
+[fe-next's README](../../libs/fe-next/README.md#quirks) under Quirks, alongside the literal-`true`
+gotcha.
+
+**What was not verified:** anything touching a real Supabase or Firebase project. The stub adapter
+covers the palimp side of items 2, 4 and 5 completely; what it cannot show is a real
+`loadMessages()` round trip, which is unchanged by §B.

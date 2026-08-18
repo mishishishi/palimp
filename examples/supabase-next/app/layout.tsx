@@ -1,15 +1,8 @@
 import { PalimpSupabaseProvider } from "@palimp/be-supabase/react";
-import { createServerAdapter } from "@palimp/be-supabase/server";
-import { PalimpProvider, setBackendAdapter } from "@palimp/fe-next";
+import { PalimpProvider } from "@palimp/fe-next";
 import { PalimpGithubPublishProvider } from "@palimp/publish-github/react";
 import { type ReactNode } from "react";
-
-setBackendAdapter(
-  createServerAdapter(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SECRET_KEY!,
-  ),
-);
+import "./palimp.ts";
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

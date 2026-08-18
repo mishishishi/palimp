@@ -1,15 +1,8 @@
 import { PalimpFirebaseProvider } from "@palimp/be-firebase/react";
-import { createServerAdapter } from "@palimp/be-firebase/server";
-import { PalimpProvider, setBackendAdapter } from "@palimp/fe-next";
+import { PalimpProvider } from "@palimp/fe-next";
 import { PalimpGithubPublishProvider } from "@palimp/publish-github/react";
 import { type ReactNode } from "react";
-
-setBackendAdapter(
-  createServerAdapter({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID!,
-    serviceAccount: process.env.FIREBASE_SERVICE_ACCOUNT!,
-  }),
-);
+import "./palimp.ts";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
