@@ -72,10 +72,35 @@ create table public.profiles (
 Leave `inline` empty. Every string in the example page ships with a `defaultMessage`, so the page
 renders fine with no rows — they get created on your first save.
 
-### A4. Turn on RLS
+### A4. Grant table access
 
-Still in the SQL editor. Without this, `profiles` (which will hold a live GitHub token) is
-readable by anyone with the publishable key:
+Still in the SQL editor. **Do not skip this** — a new Supabase project grants nothing on your
+tables to the API roles, so without it every request fails before RLS is even consulted:
+
+```sql
+grant select         on public.inline   to anon, authenticated, service_role;
+grant insert, update on public.inline   to authenticated;
+grant select         on public.profiles to authenticated, service_role;
+```
+
+Each line is something the app does: `service_role` selecting `inline` is the server's
+`loadMessages()` at build and render time; `authenticated` inserting *and* updating `inline` is
+Save, which is an upsert and needs both; `authenticated` selecting `profiles` is `getUser()`
+reading your name and publish token.
+
+Older Supabase projects granted this automatically through default privileges on `public`, which
+is why this step did not always exist. If yours already has the grants, running the block again is
+harmless.
+
+The symptom when it is missing is a **`42501`** from PostgREST — `permission denied for table
+inline`, with a hint naming the exact `GRANT` to run. `/` returns 500 and the terminal shows
+`Unlucky: 403`; `/login` still loads, because it touches no table.
+
+### A5. Turn on RLS
+
+Grants say which roles may touch a table at all; RLS says which *rows*. You need both. Without
+this, `profiles` (which will hold a live GitHub token) is readable by anyone with the publishable
+key:
 
 ```sql
 alter table public.inline   enable row level security;
@@ -98,12 +123,12 @@ Note that any authenticated user can write any message key. If this project has 
 shouldn't be editors, scope those policies to a role or an allowlist; Palimp has no authorization
 model beyond "is signed in".
 
-### A5. Create your editor account
+### A6. Create your editor account
 
 **Authentication** → **Users** → **Add user** → **Create new user**. Enter an email and password,
 and tick **Auto Confirm User** — otherwise login fails until the address is confirmed.
 
-### A6. Give that user a profile row
+### A7. Give that user a profile row
 
 Back in the SQL editor, with your address substituted:
 
@@ -124,7 +149,7 @@ select p.name, p.publish_token, u.email
 from public.profiles p join auth.users u on u.id = p.user_id;
 ```
 
-### A7. Write `.env.local`
+### A8. Write `.env.local`
 
 Create `examples/supabase-next/.env.local`:
 
@@ -304,8 +329,10 @@ pnpm --filter @example/supabase-next dev     # or @example/firebase-next
 Walk these in order; each isolates a different layer.
 
 1. **`http://localhost:3000`** — the banana farm page, plain text, no drawer handle.
-   *Failing here* means the server adapter can't reach your database: check the secret key or
-   service account.
+   *A 500 here* means the server adapter reached your database and was refused. Read the terminal,
+   not the browser: `Unlucky: 403` is missing grants ([A4](#a4-grant-table-access)), `404` is a
+   missing table, `401` is a bad key. Supabase's own reply names the fix — curl it directly with
+   `apikey` and `Authorization: Bearer` headers to see the `hint` field.
 2. **`/login`** — a sign-in card appears after a brief spinner. Enter your credentials.
    *A permanent spinner* means `hasSession()` returned `undefined`-ish forever; check the browser
    console.
@@ -328,6 +355,9 @@ Walk these in order; each isolates a different layer.
 | symptom | cause |
 | --- | --- |
 | `Module not found: @palimp/...` | libs not built — run `pnpm build` at the root |
+| `/` is a 500, terminal says `Unlucky: 403`, `/login` is fine | Supabase table grants missing — [step A4](#a4-grant-table-access). Confirm with the PostgREST body: `42501`, `permission denied for table inline` |
+| `Unlucky: 404` | the `inline` table doesn't exist, or the URL is wrong — [A3](#a3-create-the-tables) |
+| `Unlucky: 401` | the secret key is wrong or truncated in `.env.local` |
 | Login succeeds, page stays plain text | Supabase: URL is a custom domain, so the auth-cookie sniff can't find the project ref |
 | Drawer says "Session expired" | `getUser()` rejected — usually a dead session the cookie/flag still claims is live. **Sign out** in the drawer clears the hint; the raw error is printed under the button |
 | Bounced off `/login` with "Already logged in" | same stale cookie/flag; go to `/`, open the drawer and use **Sign out**, or clear the cookie / `localStorage.removeItem("palimp:firebase:hasSession")` by hand |
