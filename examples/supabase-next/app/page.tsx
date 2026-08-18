@@ -1,5 +1,13 @@
 import { PalimpFields } from "@palimp/fe-next";
 import { type Metadata } from "next";
+import {
+  FixtureAnchor,
+  FixtureForm,
+  FixtureHotkeyProbe,
+  FixtureLink,
+  FixtureNativeMousedown,
+  FixtureSummary,
+} from "./GuardFixtures.tsx";
 import { palimp } from "./palimp.ts";
 import { asString, seoFields } from "./seo.ts";
 
@@ -162,6 +170,33 @@ export default async function Page() {
             </dd>
           </div>
         </dl>
+      </section>
+
+      {/*
+        Manual test matrix for the interaction guard — see
+        docs/plans/interactive-ancestors.md §E. Only useful signed in as admin;
+        for a visitor it is a section of odd links that all work normally.
+      */}
+      <section id="guard-fixture" style={styles.section}>
+        <h2 style={styles.sectionTitle}>Guard fixtures (§E)</h2>
+        <FixtureAnchor>
+          {p("fixture.anchor", { defaultMessage: "Editable in an <a href>" })}
+        </FixtureAnchor>
+        <FixtureLink>
+          {p("fixture.link", { defaultMessage: "Editable in a <Link>" })}
+        </FixtureLink>
+        <FixtureSummary>
+          {p("fixture.summary", { defaultMessage: "Editable in a <summary>" })}
+        </FixtureSummary>
+        <FixtureForm>
+          {p("fixture.form", { defaultMessage: "Editable in a <form>" })}
+        </FixtureForm>
+        <FixtureNativeMousedown>
+          {p("fixture.mousedown", {
+            defaultMessage: "Editable in a native-mousedown <div>",
+          })}
+        </FixtureNativeMousedown>
+        <FixtureHotkeyProbe />
       </section>
 
       {/*
