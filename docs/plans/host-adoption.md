@@ -1,8 +1,9 @@
 # Adopting palimp in a real host — nano-pro-web
 
-**Status:** proposed · **Date:** 2026-08-18 · §D and §B landed 2026-08-18; A, B2, C and E unbuilt
-— see the divergence notes for [§D](#divergence-note--d-as-built-2026-08-18) and
-[§B](#divergence-note--b-as-built-2026-08-18). Body kept as written.
+**Status:** proposed · **Date:** 2026-08-18 · §D, §B and §E items 1–2 landed 2026-08-18; A, B2, C
+and §E item 3 unbuilt — see the divergence notes for
+[§D](#divergence-note--d-as-built-2026-08-18), [§B](#divergence-note--b-as-built-2026-08-18) and
+[§E](#divergence-note--e-items-1-and-2-as-built-2026-08-18). Body kept as written.
 
 The first host that is not an example. `nano-pro-web` (local repo, Next 16.2, React 19.2, App
 Router, `en`/`cs`) has palimp on its roadmap as phase 15 and has already read this codebase once:
@@ -495,3 +496,97 @@ gotcha.
 **What was not verified:** anything touching a real Supabase or Firebase project. The stub adapter
 covers the palimp side of items 2, 4 and 5 completely; what it cannot show is a real
 `loadMessages()` round trip, which is unchanged by §B.
+
+---
+
+## Divergence note — §E items 1 and 2 as built, 2026-08-18
+
+§E landed third, items 1 and 2 only. Item 3 — the GitHub PAT in the browser — is unchanged and
+still documented rather than fixed, as the section says it should be. Sections A, B2 and C remain
+unbuilt; nothing below applies to them.
+
+**Versions: 1.1.0 → 1.2.0 across all five packages**, and the root README's `file:./vendor/…`
+block with them. `core`'s public surface changed — `PalimpPublishContext` is now
+`Context<PalimpPublishAdapter | null>` — so this is the standing convention working as intended
+rather than a judgement call.
+
+**Unlike §B, this touched `libs/core`, which "Settle these during implementation" item 2
+pre-authorised.** Five files there, plus one in `be-supabase`. The load-bearing claim is untouched:
+adding a *backend* still costs zero files in `core`.
+
+### Item 1 — the stale-session hang
+
+**No contract change, as the section hoped, and the reason is worth recording.** The recovery has
+to clear the hint `hasSession()` reads, and `PalimpClientBackendAdapter` has no method for that —
+but `logout()` clears it on both backends *and does so even when the session is already dead
+server-side*, which is the part that needed checking rather than assuming. Firebase's `logout()`
+calls `setSessionFlag(false)` unconditionally after `signOut()`. Supabase's delegates to
+`supabase.auth.signOut()`, which — verified in `auth-js@2.108.2`'s `_signOut` — explicitly ignores
+a 401, 403 or 404 from the server and calls `_removeSession()` anyway. So `logout()` + `ctx.reset()`
+is the whole fix, and no adapter method was added.
+
+**The recovery action clears the session; it cannot sign the client back in.** The plan calls it a
+"sign in again" action. `core` does not know the login route — `fe-next` supplies navigation
+through `LoginPage`'s `onLogin` prop, and hardcoding `/login` in `core` would 404 on any host that
+put it elsewhere. So the button is labelled **Sign out**, and the alert and a success notification
+say to sign in again from the login page. Honest about what the button does; the alternative was a
+label that promises a navigation `core` cannot perform.
+
+**The error message is shown, not just the friendly sentence.** `DevtoolsSessionError` renders the
+reason and the **Sign out** button first, then the raw `error.message` in small muted text at the
+bottom. The client does not need it; whoever they call does, and this failure previously existed
+only in a console they were never going to open.
+
+**A failed recovery stays visible.** `reset()` fires on `onSuccess`, not `onSettled` — if
+`logout()` itself fails, its message renders and the drawer stays put. Resetting regardless would
+re-arm `hasSession()`, which would still be true, and loop straight back to the same error with
+the reason for the loop hidden.
+
+**Supabase's correction path skips retryable errors.** The plan asks for the Firebase equivalent —
+clear the hint when `getUser()` finds no user. Supabase's version calls `signOut()`, because the
+auth cookie is chunked (`sb-<ref>-auth-token`, `.0`, `.1`) and hand-deleting it is not reliable.
+But `getUser()` also rejects when the browser is simply offline, and clearing on that would sign an
+admin out for a dropped connection. The guard is `userError?.name !== "AuthRetryableFetchError"` —
+a name check rather than an `isAuthRetryableFetchError` import, so no SDK code enters the bundle
+for it. Firebase needs no such guard: its check is `auth.currentUser` after `authStateReady()`,
+which is local.
+
+**One thing deliberately not changed: the react-query retry default.** A dead session now fails
+three retries (~7s) before the error state appears, so there is still a spinner — bounded, and
+ending in something actionable. Cutting `retry` for this query would surface a genuine network
+blip as an expired session, which is a worse trade.
+
+### Item 2 — silent no-op without a publish provider
+
+Straightforward and as specified. `usePublishButton`'s hardcoded `available: true` became
+`available: !!adapter`, the label chain in `DevtoolsContent` gained **"No publish provider"** ahead
+of "Missing publish token", and the button's `disabled` gained `!publish.available`.
+
+**`usePublishRun` uses `skipToken`, not `enabled`.** The section asks that the `adapter!` assertion
+stop being an assertion. `enabled: !!adapter` cannot do that — it stops the query at runtime but
+narrows nothing, so the `queryFn` still needs the `!`. `queryFn: adapter && token ? () =>
+adapter.getLatestRun(token) : skipToken` narrows both consts inside the closure, so both `!`s are
+gone rather than relocated. `enabled` was dropped; `skipToken` covers it.
+
+### Verification — what was and was not run
+
+**Run and clean: the standing gate.** `pnpm check-types` and `pnpm build`, both green. The emitted
+`libs/core/dist/PalimpPublishContext.d.ts` was read back to confirm the nullable type reached the
+public surface rather than only the source, and `usePublishRun.ts` was grepped for surviving `!`
+assertions — none.
+
+**Not run: verification items 9 and 10.** Both need a real signed-in admin session against a real
+Supabase or Firebase project, and no credentials were available. §B's trick does not transfer:
+that was verified with a stub *server* adapter under `next build`, and §E is entirely client-side
+admin UI that no static build reaches. So the behaviour of both fixes at runtime is **unverified**:
+
+- item 9 — kill a session server-side, reload with the cookie or flag intact, confirm the drawer
+  shows the error state and that **Sign out** actually returns the page to a usable visitor view
+  rather than looping;
+- item 10 — mount `PalimpProvider` with a `publishToken` and no publish provider, confirm the
+  button is disabled and reads "No publish provider".
+
+What *is* established without credentials: the code typechecks and builds, the nullable context is
+real in the emitted surface, and the `logout()`-clears-a-dead-session claim item 1 rests on was
+checked against the installed `auth-js` source rather than assumed. What is not: that the rendered
+drawer looks right at 192px, and that the recovery round trip actually terminates.

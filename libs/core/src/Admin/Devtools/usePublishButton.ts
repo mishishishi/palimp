@@ -31,7 +31,9 @@ export const usePublishButton = () => {
     },
     isPending: mutation.isPending,
     isRunning,
-    available: true,
+    // No provider mounted is a host wiring mistake, not a user error — but it
+    // is indistinguishable from a working button unless it says so.
+    available: !!adapter,
     hasToken: !!user.publishToken,
   };
 };

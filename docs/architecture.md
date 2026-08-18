@@ -197,10 +197,15 @@ a spinner rather than flashing a login form at someone who is already signed in.
 `reset()` is how the tree re-checks the session: it sets `admin` back to `undefined`, which
 re-arms the effect in `PalimpProvider` that calls `hasSession()`. Login and logout both call it.
 
-All three contexts are created with `createContext<T>(null!)` — non-nullable type, null default.
-Rendering an admin component outside its provider is a crash, not a degraded mode. That is fine
-for the backend context, which is mandatory; it is a rough edge for the publish context, which is
-optional (see [Sharp edges](#sharp-edges)).
+The general and backend contexts are created with `createContext<T>(null!)` — non-nullable type,
+null default. Rendering an admin component outside its provider is a crash, not a degraded mode,
+which is what you want for a context that is mandatory.
+
+`PalimpPublishContext` is the exception: `createContext<PalimpPublishAdapter | null>(null)`.
+Publishing is optional, so `null` is a state the Devtools has to handle rather than a default that
+never survives to a read. Consumers check it — `usePublishButton` reports `available: !!adapter`
+and `usePublishRun` passes `skipToken` — and the drawer disables the button with
+"No publish provider", the same way a missing token disables it.
 
 ## Render, edit, save
 
@@ -324,26 +329,36 @@ stateDiagram-v2
     Unknown --> Admin: hasSession() true
     Admin --> Unknown: reset() after login/logout
     Visitor --> Unknown: reset() after login
-    Admin --> Stuck: getUser() rejects
-    note right of Stuck
+    Admin --> Expired: getUser() rejects
+    Expired --> Unknown: Sign out clears the hint, then reset()
+    note right of Expired
         cookie / flag outlived the session
-        Devtools drawer shows a spinner
+        drawer shows "Session expired"
     end note
 ```
 
 Because `hasSession()` reads a cookie or a `localStorage` flag rather than validating anything,
-both backends can report `true` for a session the server has already dropped. The failure is not
-graceful:
+both backends can report `true` for a session the server has already dropped. What happens then:
 
 - On a content page, `PalimpProvider` mounts the Devtools, whose provider calls `getUser()`. That
-  rejects, the context value stays undefined, and **the drawer renders a spinner indefinitely** —
-  the error only reaches `console.error`.
-- On `/login`, `LoginPageCore` sees `admin === true`, redirects to `/`, and shows
-  "Already logged in".
+  rejects, and the drawer renders
+  [`DevtoolsSessionError`](../libs/core/src/Admin/Devtools/DevtoolsSessionError.tsx) — the reason,
+  the underlying error message, and a **Sign out** button.
+- On `/login`, `LoginPageCore` still sees `admin === true`, redirects to `/`, and shows "Already
+  logged in". Unchanged, but no longer a dead end: the drawer on `/` is where the way out now is.
 
-The way out is to clear the cookie or the `palimp:firebase:hasSession` key by hand. The Firebase
-adapter narrows the window by clearing its flag whenever `getUser()` finds no current user; the
-Supabase cookie sniff has no equivalent correction.
+**`logout()` is the recovery.** It is the only method on `PalimpClientBackendAdapter` that clears
+the hint `hasSession()` reads, and both backends clear it even against a session the server has
+already dropped — so no new adapter method was needed. `reset()` then re-arms the check, which now
+returns false, and the page falls back to the visitor view. `core` cannot send the client onward to
+the login page because it does not know the route; `fe-next` supplies that through `LoginPage`'s
+`onLogin`. So the button signs out and says where to go rather than going there.
+
+Both adapters also correct the hint rather than only reporting it. Firebase clears its flag
+whenever `getUser()` finds no current user; Supabase calls `signOut()` on the same path, which is
+what removes its auth cookie — the cookie is chunked, so deleting it by hand is not reliable.
+Supabase skips the correction on `AuthRetryableFetchError`: a failed fetch is not evidence the
+session is gone, and an offline reload should not sign the admin out.
 
 ## Why the design is adapter-shaped
 
@@ -407,9 +422,7 @@ Documented, not fixed. Each is a real behaviour of the code as it stands.
 | --- | --- |
 | **No tests** | The root `test` script is `echo "Error: no test specified" && exit 1`. `check-types` is the only automated gate. |
 | **`XcoreClientComponent`** | A previous project identity, still in the render path — and `fe-next` also exports `palimp as xcore`. Both are in the public surface, so renaming them is a breaking change. |
-| **Stale-session hang** | See [above](#sessions-and-false-positives). The Devtools drawer spins forever rather than reporting the failure. |
 | **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`, and that workflow also fires on `push` and `pull_request`. Sound in intent — the deploy *is* the publish — but the drawer only tracks `workflow_dispatch` runs, so a deploy triggered by a push republishes the site without ever appearing there. |
-| **Silent no-op without a publish provider** | `PalimpPublishContext` holds `null` under a non-nullable type. If a user has a `publishToken` but no `PalimpGithubPublishProvider` is mounted, the button renders enabled and clicking does nothing. |
 | **Shared query client** | `core`'s `queryClient` is a module singleton, and `logout()` calls `invalidateQueries()` with no key — invalidating every query in it, Palimp's or not. |
 | **Dead input branch** | `p()` always passes `textarea`, so `EditComponent`'s `<input>` branch is unreachable through `fe-next`. |
 
