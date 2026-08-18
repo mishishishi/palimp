@@ -112,8 +112,10 @@ insert into public.profiles (user_id, name)
 select id, 'Your Name' from auth.users where email = 'you@example.com';
 ```
 
-**Don't skip this.** No profile row means `getUser()` rejects and the Devtools drawer spins
-forever with the error only in the console.
+**Don't skip this.** The adapter reads the profile with `.maybeSingle()`, so no row is not an
+error — `getUser()` succeeds with `name` and `publishToken` undefined. The drawer opens showing
+your email alone, Publish stays disabled on "Missing publish token", and step **P2** below has no
+row to write the token into: its `update` matches nothing and reports no failure.
 
 Confirm it worked — this should return exactly one row:
 
@@ -225,8 +227,9 @@ UID** (not auto-ID) → add one field, `name`, type string, any value → Save.
 
 Leave `inline` alone; Firestore creates collections implicitly, so it appears on your first save.
 
-Getting the document ID wrong is the most common failure here: the drawer will spin forever
-because `getUser()` found no profile.
+Getting the document ID wrong is the most common failure here, and it is a quiet one: a missing
+doc is not an error, so `getUser()` succeeds with `name` and `publishToken` undefined. The drawer
+opens showing your email alone and Publish stays disabled on "Missing publish token".
 
 ### B8. Write `.env.local`
 
@@ -311,8 +314,8 @@ Walk these in order; each isolates a different layer.
    *Still plain text after a successful login* is the session-detection failure — for Supabase,
    check you used the `supabase.co` URL.
 4. **Open the drawer** — Save, preview toggle, Publish, and your name and email at the bottom.
-   *A permanent spinner here* means `getUser()` rejected: the profile row or doc is missing or
-   its id doesn't match the auth user.
+   *"Session expired" here* means `getUser()` rejected — most often a stale cookie or flag. Use
+   the **Sign out** button, then sign in again; the underlying error is printed beneath it.
 5. **Edit a heading.** It gets a cyan glow, and the handle shows a badge count.
 6. **Save**, then reload. Your text survives. Check the `inline` table or collection — there's now
    a row keyed `hero.title` or similar.
@@ -326,12 +329,13 @@ Walk these in order; each isolates a different layer.
 | --- | --- |
 | `Module not found: @palimp/...` | libs not built — run `pnpm build` at the root |
 | Login succeeds, page stays plain text | Supabase: URL is a custom domain, so the auth-cookie sniff can't find the project ref |
-| Drawer spins forever | `getUser()` rejected — missing profile row/doc, mismatched id, or a dead session the cookie/flag still claims is live |
-| Bounced off `/login` with "Already logged in" | same stale cookie/flag; clear the cookie, or `localStorage.removeItem("palimp:firebase:hasSession")` |
+| Drawer says "Session expired" | `getUser()` rejected — usually a dead session the cookie/flag still claims is live. **Sign out** in the drawer clears the hint; the raw error is printed under the button |
+| Bounced off `/login` with "Already logged in" | same stale cookie/flag; go to `/`, open the drawer and use **Sign out**, or clear the cookie / `localStorage.removeItem("palimp:firebase:hasSession")` by hand |
 | Save fails silently, edits stay pending | RLS or security rules reject the write — check the `insert` **and** `update` policies exist |
 | Page renders keys like `hero.title` | reaching the database worked but returned nothing usable; expected only if a row exists with an empty value |
 | `JSON.parse` error on first render | Firebase service account is double-quoted in `.env.local` — use single quotes |
-| Publish disabled, "Missing publish token" | no `publish_token` / `publishToken` on the profile |
+| Publish disabled, "Missing publish token" | no `publish_token` / `publishToken` on the profile — or no profile row/doc at all, which is not an error and shows up only here and as a missing name |
+| Publish disabled, "No publish provider" | `PalimpGithubPublishProvider` isn't mounted; the layout has the backend and `PalimpProvider` but not the publish provider |
 | `GitHub dispatch failed: 404` | workflow filename wrong, missing `workflow_dispatch:`, or the token can't see the repo |
 | `could not locate dispatched run` | the run didn't appear within ~6 s; it probably still started — check the Actions tab |
 

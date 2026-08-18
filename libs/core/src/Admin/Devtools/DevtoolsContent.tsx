@@ -18,13 +18,15 @@ export const DevtoolsContent = () => {
   const { data: run } = usePublishRun();
   const [modalOpen, setModalOpen] = useState(false);
 
-  const publishLabel = !publish.hasToken
-    ? "Missing publish token"
-    : publish.isPending
-      ? "Dispatching..."
-      : publish.isRunning
-        ? "Publishing..."
-        : "Publish";
+  const publishLabel = !publish.available
+    ? "No publish provider"
+    : !publish.hasToken
+      ? "Missing publish token"
+      : publish.isPending
+        ? "Dispatching..."
+        : publish.isRunning
+          ? "Publishing..."
+          : "Publish";
 
   return (
     <>
@@ -41,7 +43,9 @@ export const DevtoolsContent = () => {
       <Space.Compact block>
         <Button
           {...publish.props}
-          disabled={publish.props.disabled || !publish.hasToken}
+          disabled={
+            publish.props.disabled || !publish.available || !publish.hasToken
+          }
           style={{ flex: 1 }}
         >
           {publishLabel}

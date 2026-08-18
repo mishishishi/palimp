@@ -63,9 +63,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 }
 ```
 
-`PalimpGithubPublishProvider` is optional — leave it out and there is no Publish capability. But
-see [Quirks](#quirks): omitting it while a user has a publish token leaves the button enabled and
-inert.
+`PalimpGithubPublishProvider` is optional — leave it out and there is no Publish capability. The
+drawer says so: the Publish button is disabled and reads "No publish provider", the same way it
+reads "Missing publish token" when the signed-in user has no token.
 
 ### 3. Wrap strings in a server component
 
@@ -185,10 +185,6 @@ the visitor bundle. A static import anywhere in a render path undoes it.
 **`XcoreClientComponent`.** The client component in the render path still carries a previous
 project's name, and `index.ts` also exports `palimp as xcore`. Both are in the public surface,
 so renaming is a breaking change rather than a tidy-up.
-
-**Silent no-op without a publish provider.** `PalimpPublishContext` holds `null` under a
-non-nullable type. If the signed-in user has a `publishToken` but no publish provider is mounted,
-the Publish button renders enabled and clicking does nothing.
 
 **Peers.** `next ^16`, `react >=18`, `@palimp/core`. React 18 satisfies the declared range, but
 `core` uses React 19 APIs (`use()`, the `<Context value>` shorthand), so 19 is the real floor.

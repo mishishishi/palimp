@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 import { use } from "react";
 import { PalimpPublishContext } from "../../PalimpPublishContext";
 import { queryClient } from "../queryClient";
@@ -14,8 +14,12 @@ export const usePublishRun = () => {
   return useQuery(
     {
       queryKey: publishRunQueryKey,
-      queryFn: () => adapter!.getLatestRun(token!),
-      enabled: !!adapter && !!token,
+      // `skipToken` rather than `enabled`: both stop the query, but narrowing
+      // the ternary on `adapter` and `token` is what lets the call drop its
+      // non-null assertions, so the nullable context is checked rather than
+      // asserted away.
+      queryFn:
+        adapter && token ? () => adapter.getLatestRun(token) : skipToken,
       refetchInterval: (q) =>
         q.state.data && q.state.data.status !== "completed" ? 10_000 : false,
     },

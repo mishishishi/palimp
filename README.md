@@ -108,10 +108,10 @@ Commit the tarballs to the host and depend on them by path:
 ```json
 {
   "dependencies": {
-    "@palimp/core": "file:./vendor/palimp-core-1.1.0.tgz",
-    "@palimp/fe-next": "file:./vendor/palimp-fe-next-1.1.0.tgz",
-    "@palimp/be-supabase": "file:./vendor/palimp-be-supabase-1.1.0.tgz",
-    "@palimp/publish-github": "file:./vendor/palimp-publish-github-1.1.0.tgz"
+    "@palimp/core": "file:./vendor/palimp-core-1.2.0.tgz",
+    "@palimp/fe-next": "file:./vendor/palimp-fe-next-1.2.0.tgz",
+    "@palimp/be-supabase": "file:./vendor/palimp-be-supabase-1.2.0.tgz",
+    "@palimp/publish-github": "file:./vendor/palimp-publish-github-1.2.0.tgz"
   }
 }
 ```
