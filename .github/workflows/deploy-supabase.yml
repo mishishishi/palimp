@@ -26,8 +26,8 @@ jobs:
       id-token: write
     env:
       NEXT_BASE_PATH: /palimp
-      NEXT_PUBLIC_SUPABASE_URL: https://inbozfknlugadtnbdqby.supabase.co
-      NEXT_PUBLIC_GITHUB_OWNER: AlfonzAlfonz
+      NEXT_PUBLIC_SUPABASE_URL: https://rdmwyqfeikcqwodzrfzx.supabase.co
+      NEXT_PUBLIC_GITHUB_OWNER: mishishishi
       NEXT_PUBLIC_GITHUB_REPO: palimp
       NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml
 
@@ -45,8 +45,8 @@ jobs:
         working-directory: .
       - run: pnpm build
         env:
-          SUPABASE_SECRET_KEY: ${{ secrets.SECRET_KEY }}
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PUBLISHABLE_KEY }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
