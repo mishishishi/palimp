@@ -39,7 +39,7 @@ flowchart TB
     subgraph core["@palimp/core — contracts + admin UI"]
         contracts["PalimpServerBackendAdapter<br/>PalimpClientBackendAdapter<br/>PalimpPublishAdapter"]
         ctx["PalimpGeneralContext<br/>PalimpClientBackendContext<br/>PalimpPublishContext"]
-        admin["EditComponent · Devtools · LoginPageCore · editsStore"]
+        admin["EditComponent · Devtools · LoginPageCore<br/>PalimpFields · editsStore · fieldsStore"]
     end
 
     subgraph impls["Adapters"]
@@ -253,15 +253,25 @@ Points worth knowing:
   without the wrapper — which is also its limitation: no element means no editor, and no
   client-side re-read, so an `asString` value is fixed until the next build. See
   [fe-next's README](../libs/fe-next/README.md#quirks).
-- **Nothing admin-only ships to visitors.** `EditComponent` and `Devtools` are both behind
-  `next/dynamic` imports of `@palimp/core/admin`, so antd, react-query, and lucide stay out of
-  the visitor bundle. This is why `core` has a separate `./admin` export.
+- **No admin *code* ships to visitors.** `EditComponent`, `Devtools` and `PalimpFields` are all
+  behind `next/dynamic` imports of `@palimp/core/admin`, so antd, react-query, and lucide stay out
+  of the visitor bundle. This is why `core` has a separate `./admin` export. Admin-only *data* is
+  a different question: every `p()` ships its `messageKey` and `staleValue` in the RSC flight
+  payload, and `<PalimpFields>` ships its declarations there too. The `admin` check runs in the
+  browser, after the server has rendered, so there is no earlier point to make it.
 - **`editsStore` is a plain module singleton**, not context —
   [libs/core/src/Admin/editsStore.ts](../libs/core/src/Admin/editsStore.ts). A `Map` plus a
   `Set` of listeners plus a cached array snapshot, read through `useSyncExternalStore`. The
   cached snapshot exists because `useSyncExternalStore` requires a referentially stable
   `getSnapshot` result; rebuilding `Array.from(map.entries())` on every call would loop forever.
   The server snapshot is `undefined` / a shared empty array, so SSR is safe.
+- **`fieldsStore` mirrors it for keys that are not on the page.** Same shape, keyed by
+  registration id so two `<PalimpFields>` declaring one group can each withdraw their own fields
+  ([libs/core/src/Admin/fieldsStore.ts](../libs/core/src/Admin/fieldsStore.ts)). The Devtools
+  **Fields** modal renders the ordinary `EditComponent` per registered field, which is why the
+  save path needed no changes at all: a modal edit and an inline edit are the same `editsStore`
+  entry, the same badge count, and the same `setKeys` batch. It is a placement feature, not a
+  second editor.
 - **A failed save keeps the edits.** `setKeys` throwing skips `editsStore.clear()`, so the
   drawer still holds everything the user typed.
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved

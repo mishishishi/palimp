@@ -126,8 +126,94 @@ export const generateMetadata = async (): Promise<Metadata> => {
 `generateMetadata` and the page body each call `palimp()`, but `loadMessages()` is wrapped in
 React's `cache()`, so the two share a single read per page render.
 
-Two asymmetries come with it, both permanent — see [Quirks](#quirks): `asString` has to be a
-literal `true`, and an `asString` value changes only on publish.
+One asymmetry comes with it, and it is permanent — see [Quirks](#quirks): an `asString` value
+changes only on publish, including for the admin. `asString` also has to be a literal `true`.
+
+An `asString` key has no element on the page, so there is nowhere to put an inline editor.
+[`PalimpFields`](#palimpfields--editing-keys-that-are-not-on-the-page) is how it gets one.
+
+### `PalimpFields` — editing keys that are not on the page
+
+Declare the keys, and they get editors in the Devtools **Fields** modal. The component renders
+`null`: nothing is added to the page's layout.
+
+```tsx
+// app/seo.ts — one declaration, two consumers
+import type { PalimpField, PalimpP } from "@palimp/fe-next";
+
+export const seoFields = [
+  { key: "meta.title", label: "Page title", defaultMessage: "Sunny Grove" },
+  { key: "meta.description", label: "Meta description", defaultMessage: "…" },
+] as const satisfies ReadonlyArray<PalimpField>;
+
+export const asString = (p: PalimpP, field: PalimpField): string =>
+  p(field.key, {
+    ...(field.defaultMessage ? { defaultMessage: field.defaultMessage } : {}),
+    asString: true,
+  });
+```
+
+```tsx
+// app/page.tsx
+export const generateMetadata = async (): Promise<Metadata> => {
+  const { p } = await palimp();
+  const [title, description] = seoFields;
+
+  return { title: asString(p, title), description: asString(p, description) };
+};
+
+export default async function Page() {
+  return (
+    <main>
+      …
+      <PalimpFields group="SEO" fields={seoFields} />
+    </main>
+  );
+}
+```
+
+**Declare the array once and consume it twice** — through `p` in `generateMetadata`, and whole in
+the body. That is the point of the shape: the two cannot drift. `PalimpP` is exported so the
+helper that takes `p` has a name.
+
+Registration is explicit. There is no auto-registration from `asString` calls, and there cannot
+be: `generateMetadata` and the page body each call `palimp()` and get **separate closures**, so a
+registry inside `palimp()` would never see the metadata keys — the entire motivating case.
+
+`group` is a display heading in the modal. Two `<PalimpFields>` may share a group; their fields
+merge, and a key declared twice appears once. A key that is *also* on the page is allowed — both
+editors bind to the same pending edit and save together.
+
+Editing in the modal is the same `EditComponent` the page uses, feeding the same `editsStore`: the
+drawer's badge counts modal edits, and Save writes them in one batch with the inline ones.
+
+### Adopting palimp in an app that already has a dictionary
+
+Most real hosts already have typed i18n dictionaries. **Keep them.** Pass the dictionary value as
+`defaultMessage` and let palimp rows act as *overrides*:
+
+```tsx
+{p(`${locale}.pages.home.hero.lead`, { defaultMessage: dict.pages.home.hero.lead })}
+```
+
+The dictionary stays the source of truth; the database holds only what someone has actually
+edited. That buys three things: a build-time type gate that still fails when a locale misses a
+key, an empty database that changes nothing, and a way out — delete the `p()` calls and the app is
+exactly as it was.
+
+**Do not migrate the dictionary into the database.** It is the obvious alternative and it is
+irreversible: the type gate goes, every string becomes a network round trip at build, and a
+database outage becomes a broken page rather than a stale one.
+
+**Locales are a key prefix, not a field.** `Message` is `{ key, value }` with no locale, so a host
+with more than one locale prefixes: `cs.pages.home.hero.lead`. Spell the prefix once, in a wrapper
+that takes `locale` as an argument, rather than at each call site. The cost to accept is that
+`loadMessages()` returns every locale's rows on every page render — it has no filter. At dictionary
+scale that is fine; it is the same trade as the whole-table read, doubled.
+
+A locale *field* would push locale awareness into `PalimpServerBackendAdapter`, both backends,
+`getKey`/`setKeys` and the editor's query keys — for something string concatenation already does.
+The case that would justify it is side-by-side locale editing, which prefixing genuinely cannot do.
 
 ## What `PalimpProvider` does
 
@@ -174,13 +260,19 @@ hold a query. So an admin editing a page title sees the drawer count the edit an
 while the `<title>` keeps the old value until the site is rebuilt. Inherent to the static-export
 premise, not fixable here.
 
-**An `asString` key renders no editor.** There is no element to put one in, so the key is editable
-only by someone who already knows it exists.
+**`<PalimpFields>` declarations ship to visitors in the RSC payload.** The component renders `null`
+for a visitor and loads no admin code — verified in a static export — but it is a client component
+taking props from a server one, so its `group`, keys, labels and `defaultMessage`s are serialised
+into the flight payload regardless. The `admin` check runs in the browser, after the server has
+already rendered; there is no earlier point to make it. Nothing new in kind — every `p()` call
+already ships its `messageKey` and `staleValue` the same way — but don't put anything in a `label`
+you wouldn't publish.
 
-**Admin code is loaded through `next/dynamic`, and must stay that way.** Both
-[ClientComponent.tsx](src/ClientComponent.tsx) and [PalimpProvider.tsx](src/PalimpProvider.tsx)
-reach `@palimp/core/admin` dynamically, which is the only reason antd and react-query stay out of
-the visitor bundle. A static import anywhere in a render path undoes it.
+**Admin code is loaded through `next/dynamic`, and must stay that way.**
+[ClientComponent.tsx](src/ClientComponent.tsx), [PalimpProvider.tsx](src/PalimpProvider.tsx) and
+[PalimpFields.tsx](src/PalimpFields.tsx) all reach `@palimp/core/admin` dynamically, which is the
+only reason antd and react-query stay out of the visitor bundle. A static import anywhere in a
+render path undoes it.
 
 **`XcoreClientComponent`.** The client component in the render path still carries a previous
 project's name, and `index.ts` also exports `palimp as xcore`. Both are in the public surface,
