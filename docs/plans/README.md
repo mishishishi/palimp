@@ -20,7 +20,7 @@ For how the code behaves today:
 | [publish-status.md](publish-status.md) | run status icon + modal | Closest to current, but several details shipped differently — see the divergence note at the end of the file. |
 | [be-firebase.md](be-firebase.md) | `@palimp/be-firebase` | Landed essentially as written. Its "Files modified: None" claim held, which is the load-bearing evidence for the adapter design. |
 | [documentation.md](documentation.md) | this documentation set | Executed. |
-| [interactive-ancestors.md](interactive-ancestors.md) | **not built** | Proposed 2026-08-18. The only entry here that is still ahead of the code: editing a `p()` nested in an `<a>`, `<button>` or `<summary>`. |
+| [interactive-ancestors.md](interactive-ancestors.md) | the window-capture interaction guard | **Built**, §A4 excepted — the Alt+click passthrough stays deferred, with preview mode as the escape hatch. Divergences, all narrowing-or-widening rather than reversals, are recorded at the end of the file. |
 | [host-adoption.md](host-adoption.md) | `pnpm pack:all`, `asString`, `PalimpFields`, the session error state and the disabled Publish button | **Nearly all built.** Written for the first host that was not an example. §D (tarball distribution, lockstep versions), §B (`asString`, the cached load, the shared registration module), §E items 1–2 and §B2 + §A all landed. Only §C (a host-side measurement) and §E item 3 (the browser PAT, documented not fixed) remain, and neither is a library change. One divergence note per section at the end; the §E and §B2 notes record which verification items could not be run without credentials. |
 
 ## Adding a plan

@@ -276,6 +276,22 @@ Points worth knowing:
   drawer still holds everything the user typed.
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved
   edits. It shows how the page will look, not how it currently is.
+- **A window-capture guard keeps a nested editor inert.** An editor can land inside an `<a>`, a
+  `<summary>`, or a `<div>` with a `mousedown` handler, where the click that focuses it also
+  activates the ancestor. [interactionGuard.ts](../libs/core/src/Admin/interactionGuard.ts)
+  listens on `window` with `capture: true` — above `document`, where a host listener would beat
+  us on registration order alone — and for any pointer, key or drag event originating inside
+  `[data-palimp-editor]` calls `stopPropagation()`, plus `preventDefault()` on `click`,
+  `auxclick` and `dragstart`. Never on `mousedown`: focus and caret placement *are* its default
+  action. A module-level refcount driven by a `useEffect` in `EditComponent` keeps the listeners
+  off `window` when no editor is mounted, so SSR never touches it.
+
+  The constraint to know before extending it: stopping at window-capture stops the editor's own
+  React handlers too, because React 19's root container is below us. That is survivable only
+  because the editor's one live handler is `onChange`, which maps to the native `input` event —
+  which is why `input`, `beforeinput`, `compositionstart/end`, `focus` and `blur` are excluded
+  from the guarded set. Adding one would break typing silently. Preview mode is the escape hatch
+  when a nested link genuinely needs clicking.
 
 ## Publish
 
@@ -434,7 +450,7 @@ Documented, not fixed. Each is a real behaviour of the code as it stands.
 | **`XcoreClientComponent`** | A previous project identity, still in the render path — and `fe-next` also exports `palimp as xcore`. Both are in the public surface, so renaming them is a breaking change. |
 | **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`, and that workflow also fires on `push` and `pull_request`. Sound in intent — the deploy *is* the publish — but the drawer only tracks `workflow_dispatch` runs, so a deploy triggered by a push republishes the site without ever appearing there. |
 | **Shared query client** | `core`'s `queryClient` is a module singleton, and `logout()` calls `invalidateQueries()` with no key — invalidating every query in it, Palimp's or not. |
-| **Dead input branch** | `p()` always passes `textarea`, so `EditComponent`'s `<input>` branch is unreachable through `fe-next`. |
+| **Dead input branch** | `p()` always passes `textarea`, so `EditComponent`'s `<input>` branch is unreachable through `fe-next`. It is no longer *weaker* than the textarea — both carry `data-palimp-editor` and the detaching `form` attribute, and the guard suppresses Enter on the input specifically — but it stays untested by any live caller. |
 
 ## Where things live
 

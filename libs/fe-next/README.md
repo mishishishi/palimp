@@ -268,6 +268,29 @@ already rendered; there is no earlier point to make it. Nothing new in kind — 
 already ships its `messageKey` and `staleValue` the same way — but don't put anything in a `label`
 you wouldn't publish.
 
+**`p()` inside interactive markup: inert, but decide which shape you want first.** An editor
+nested in an `<a>`, a `<Link>`, a `<summary>` or anything with a `mousedown` handler used to
+activate that ancestor on the click that focused it. `core`'s interaction guard now suppresses
+every pointer, key and drag event originating in an editor at window-capture, so
+`<a href="/x">{p("nav.x")}</a>` is safe: it focuses, types, drag-selects, and does not navigate —
+including on middle click, and including for host listeners attached natively. The loading
+placeholder for the dynamic import carries the same marker, so the import window does not leak
+either. The cost is that the link is **not clickable in edit mode**; toggle preview in the drawer
+to get the page's real behaviour back.
+
+That leaves one case the guard cannot fix, and it is a markup decision, not a bug:
+
+- **A control whose entire content is the string** — `<button>{p("cta.label")}</button>`.
+  Suppressing the click makes the button unusable while editing, and a form control inside a
+  `<button>` is invalid HTML anyway. Write it as `p("cta.label", { asString: true })` and give
+  the key an editor in the Fields modal with
+  [`<PalimpFields>`](#palimpfields--editing-keys-that-are-not-on-the-page) instead. No
+  nesting, no suppression, and the save path is identical — the trade is the `asString` quirk
+  above: the button's own label changes only on publish.
+- Same answer for an ancestor that cancels the `mousedown` default from its own `window`-capture
+  listener registered before ours. The guard re-asserts focus, but if that listener also moves or
+  unmounts the subtree there is nothing left to focus into.
+
 **Admin code is loaded through `next/dynamic`, and must stay that way.**
 [ClientComponent.tsx](src/ClientComponent.tsx), [PalimpProvider.tsx](src/PalimpProvider.tsx) and
 [PalimpFields.tsx](src/PalimpFields.tsx) all reach `@palimp/core/admin` dynamically, which is the
