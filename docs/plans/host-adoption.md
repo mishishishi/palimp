@@ -1,22 +1,26 @@
-# Adopting palimp in a real host — nano-pro-web
+# Adopting palimp in a real host
 
 **Status:** proposed · **Date:** 2026-08-18 · §D, §B, §E items 1–2, §B2 and §A all landed
 2026-08-18; only §C and §E item 3 remain, and neither is a library change — see the divergence
 notes for [§D](#divergence-note--d-as-built-2026-08-18),
 [§B](#divergence-note--b-as-built-2026-08-18),
 [§E](#divergence-note--e-items-1-and-2-as-built-2026-08-18) and
-[§B2/§A](#divergence-note--b2-and-a-as-built-2026-08-18). Body kept as written.
+[§B2/§A](#divergence-note--b2-and-a-as-built-2026-08-18).
 
-The first host that is not an example. `nano-pro-web` (local repo, Next 16.2, React 19.2, App
-Router, `en`/`cs`) has palimp on its roadmap as phase 15 and has already read this codebase once:
-its [ADR 006](../../../nano-pro-web/agent-guidelines/decisions/006-content-storage.md) concluded
-palimp is a flat key→string store that cannot model its Projects collection, and parked the rest.
-This plan covers what has to change **here** so that phase 15 is a wiring job rather than a
-redesign, plus the host-side steps it depends on.
+> **Edited 2026-08-18, against the usual rule for this folder.** The host was a private project and
+> its name, decision-record numbers and internal script names have been generalised to "the host"
+> throughout — including the companion phase file, which was deleted. Only identifying details
+> changed; every decision, trade-off and divergence note is as written. `git log` has the original.
 
-Scope: copy editing only. **Collections stay out** — ADR 006 rejected modelling a Project as a
-bundle of flat keys, that reasoning still holds, and OQ-13 already chose developer-assisted
-publishing for launch. Nothing below moves palimp toward entities.
+The first host that is not an example: a private Next 16.2 / React 19.2 App Router site with two
+locales, which had already read this codebase once and concluded that palimp is a flat key→string
+store — fine for copy, unable to model a collection of entities. This plan covers what has to
+change **here** so that adopting it is a wiring job rather than a redesign, plus the host-side
+steps it depends on.
+
+Scope: copy editing only. **Collections stay out.** Modelling an entity as a bundle of flat keys
+was rejected on the host side and that reasoning still holds; publishing entities stays
+developer-assisted. Nothing below moves palimp toward entities.
 
 ## What is already true
 
@@ -28,19 +32,19 @@ Worth stating so it isn't re-derived. Checked against the tree, not from memory.
   [PalimpProvider.tsx:7](../../libs/fe-next/src/PalimpProvider.tsx#L7)) and both backend SDKs are
   dynamically imported inside `ensureX()`.
 - The visitor branch of `p()` renders a bare fragment — no wrapper element, no layout cost.
-- The host already has a verified static-export build (`pnpm build:pages`) exercised on every push
-  to `main`. The premise this library is built on is available there; it is gated behind an env var
-  pending its OQ-5.
+- The host already has a verified static-export build exercised on every push to `main`. The
+  premise this library is built on is available there; it is gated behind an env var pending the
+  host's decision on production hosting.
 
-Five things stand between that and a usable phase 15.
+Five things stand between that and a usable adoption.
 
 ---
 
 ## A. Locale-prefixed keys — host-side convention, no library change
 
 `Message` is `{ key, value }` with no locale field. The host prefixes:
-`cs.pages.home.hero.lead`. This is what ADR 006/007 already anticipated ("phase 15 prefixes rather
-than restructures"), and the host's dictionary keys are flat, dot-separated and locale-free by
+`cs.pages.home.hero.lead`. This is what the host's own decision records already anticipated —
+prefix rather than restructure — and its dictionary keys are flat, dot-separated and locale-free by
 convention precisely so the prefix is mechanical.
 
 **Decision: prefix, do not add a locale field to `Message`.** A locale field would push locale
@@ -55,7 +59,7 @@ only) that is fine. It is the same trade already documented in
 doubles it.
 
 **Ship instead:** a `defaultMessage`-first integration shape, documented rather than coded. The host
-keeps `src/content/i18n/{en,cs}.ts` as typed source of truth and passes the dictionary value through:
+keeps its typed per-locale dictionary modules as source of truth and passes the value through:
 
 ```tsx
 {p(`${locale}.pages.home.hero.lead`, { defaultMessage: dict.pages.home.hero.lead })}
@@ -72,8 +76,8 @@ into the database) throws away the type gate and is irreversible.
 ## B. `asString` — one function, two return types
 
 **Why.** `p()` returns JSX, so it can never supply `metadata.title`, `metadata.description`, `alt`,
-`aria-label`, or any prop typed `string`. ADR 006 recorded this as permanent: *"the dictionary is
-permanently the source of truth for non-body strings."* It does not have to be.
+`aria-label`, or any prop typed `string`. The host recorded this as permanent — *"the dictionary is
+permanently the source of truth for non-body strings"* — but it does not have to be.
 
 **Decision: an option on `p()`, not a second `s()` function.**
 
@@ -189,7 +193,7 @@ that the two stay in sync visually before promising it.
 Every `p()` is a client component. The string ships twice — once as HTML, once as `staleValue` in
 the RSC flight payload — and one component hydrates per string. On a page with 200 strings that is
 200 hydrated components and the page's entire copy duplicated in the payload. Against the host's
-NFR-2 this is a real number and nobody has measured it.
+performance budget this is a real number and nobody has measured it.
 
 **No library change proposed.** Two optimisations exist and both are premature:
 
@@ -198,9 +202,10 @@ NFR-2 this is a real number and nobody has measured it.
 - A build-time flag that compiles `p()` down to text when editing is off. Real, and a much larger
   feature than anything else here.
 
-**Instead, the host adopts one band and measures.** Convert `/technology`'s hero only, run
-`pnpm measure`, compare. That number decides scope for the rest of phase 15 — per-region, as ADR 006
-already said. Record it in this file as a divergence note when known.
+**Instead, the host adopts one band and measures.** Convert a single page's hero only, run the
+host's performance measurement, compare. That number decides the scope of the rest of the
+adoption — per-region, as the host's own analysis already said. Record it in this file as a
+divergence note when known.
 
 ---
 
@@ -214,10 +219,10 @@ detail decides the approach: `workspace:*` does not resolve outside this monorep
 **Decision: `pnpm pack` tarballs, committed to the host.**
 
 ```
-nano-pro-web/vendor/palimp-core-1.0.0.tgz
-                    palimp-fe-next-1.0.0.tgz
-                    palimp-be-supabase-1.0.0.tgz      (or be-firebase)
-                    palimp-publish-github-1.0.0.tgz
+<host>/vendor/palimp-core-1.0.0.tgz
+                palimp-fe-next-1.0.0.tgz
+                palimp-be-supabase-1.0.0.tgz      (or be-firebase)
+                palimp-publish-github-1.0.0.tgz
 ```
 
 `"@palimp/core": "file:./vendor/palimp-core-1.0.0.tgz"`. Reproducible, CI needs no access to this
@@ -230,7 +235,7 @@ Not a one-liner, because three things fail silently if skipped. Bare `node`, no 
 
 ```sh
 pnpm pack:all                          # → ./dist-packages/
-pnpm pack:all --out ../nano-pro-web/vendor
+pnpm pack:all --out ../your-app/vendor
 ```
 
 What it does, in order:
@@ -253,7 +258,7 @@ What it does, in order:
 5. **Print the four filenames and their versions**, so the copy-paste into the host's
    `package.json` is mechanical.
 6. **Exit non-zero on any assertion**, and on packing zero packages. Same standing rule the host's
-   own `pages-shim.mjs` follows: a script whose job is invisible must count what it did.
+   own build scripts follow: a script whose job is invisible must count what it did.
 
 Plus a README section on consuming palimp outside the monorepo, covering the tarball flow and the
 `link:` dev override.
@@ -293,17 +298,16 @@ Not blocking, leave alone: `XcoreClientComponent`'s name, the `xcore` alias, the
 
 Not this repo's work, listed because §A–§E are useless without it.
 
-- **Answer OQ-5 for a static host.** Palimp's premise is "the deployed artifact is a build output and
-  Publish re-runs the build." The host's export mode is built and CI-exercised but env-gated as a
-  preview; it becomes the production build.
-- **`redirects()` retires permanently** — `scripts/pages-shim.mjs`'s meta-refresh stubs stop being
-  scaffolding and become the mechanism.
+- **Commit to static export in production.** Palimp's premise is "the deployed artifact is a build
+  output and Publish re-runs the build." The host's export mode is built and CI-exercised but
+  env-gated as a preview; it has to become the production build.
+- **Redirects retire permanently** — the export shim's meta-refresh stubs stop being scaffolding
+  and become the mechanism.
 - **The deploy workflow declares `workflow_dispatch:`**, or the dispatch 404s.
-- **Drop the `NEXT_PUBLIC_PREVIEW` gating** of `noindex` and `PreviewNotice`.
-- **Fix the two absolute CSS asset paths at source** — the preview plan deferred this explicitly
-  until OQ-5 lands.
-- **Keys used by `highlight()` stay dictionary-owned** unless they move to `asString`. It takes a
-  string and its throw-on-drift behaviour is deliberate (ADR 018).
+- **Drop the preview env gating** of `noindex` and the preview notice.
+- **Fix the absolute CSS asset paths at source** — deferred until static export lands.
+- **Keys read by helpers that take a `string` stay dictionary-owned** unless they move to
+  `asString`. Their throw-on-drift behaviour is deliberate.
 
 ---
 
@@ -355,7 +359,7 @@ touches zero files in `core`. Nothing here weakens it.
     install resolves — the check that the `workspace:*` peer rewrite actually happened. Then break
     it on purpose (hand-edit a tarball's `package.json` back to `workspace:*`) and confirm the
     script's assertion catches it.
-12. Host-side, once one band is converted: `pnpm measure` before and after, number recorded here.
+12. Host-side, once one band is converted: measure before and after, number recorded here.
 
 ## Files expected to change
 

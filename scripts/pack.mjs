@@ -3,8 +3,8 @@
 // Packs every @palimp/* package into a tarball a host can install with `file:`.
 //
 //   pnpm pack:all
-//   pnpm pack:all --out ../nano-pro-web/vendor
-//   pnpm pack:all --verify-only --out ../nano-pro-web/vendor
+//   pnpm pack:all --out ../your-app/vendor
+//   pnpm pack:all --verify-only --out ../your-app/vendor
 //
 // The load-bearing part is not the packing — it is the assertions afterwards. `@palimp/core` is a
 // `workspace:*` **peer** of the other four packages, and `workspace:*` does not resolve outside
