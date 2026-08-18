@@ -7,7 +7,9 @@ import { usePublishButton } from "./usePublishButton";
 import { usePublishRun } from "./usePublishRun";
 import { useSaveButton } from "./useSaveButton";
 import { useDevtools } from "./DevtoolsContext";
-import { LogOut } from "lucide-react";
+import { ListChecks, LogOut } from "lucide-react";
+import { useFieldGroups } from "../fieldsStore";
+import { FieldsModal } from "./FieldsModal";
 
 export const DevtoolsContent = () => {
   const { user, logout } = useDevtools();
@@ -17,6 +19,10 @@ export const DevtoolsContent = () => {
   const publish = usePublishButton();
   const { data: run } = usePublishRun();
   const [modalOpen, setModalOpen] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+
+  const groups = useFieldGroups();
+  const fieldCount = groups.reduce((n, g) => n + g.fields.length, 0);
 
   const publishLabel = !publish.available
     ? "No publish provider"
@@ -37,6 +43,17 @@ export const DevtoolsContent = () => {
       <Button {...preview.props} block>
         {preview.preview ? "Edit mode" : "Preview mode"}
       </Button>
+
+      <Button
+        block
+        icon={<ListChecks size={16} strokeWidth={1.2} />}
+        onClick={() => setFieldsOpen(true)}
+        disabled={fieldCount === 0}
+      >
+        {fieldCount === 0 ? "No fields" : `Fields (${fieldCount})`}
+      </Button>
+
+      <FieldsModal open={fieldsOpen} onClose={() => setFieldsOpen(false)} />
 
       <div style={{ flex: "1 1 0" }} />
 
