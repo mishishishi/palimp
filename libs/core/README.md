@@ -10,12 +10,17 @@ writing an adapter of your own.
 
 ## Entry points
 
-Two, and the split matters — see [Quirks](#quirks).
+Three, and the split matters — see [Quirks](#quirks).
 
-- `@palimp/core` — types, adapter interfaces, and the three React contexts. Cheap; no UI deps
-  pulled in.
-- `@palimp/core/admin` — `EditComponent`, `Devtools`, `LoginPageCore`, `PalimpFields`. Pulls in
-  antd, `@tanstack/react-query`, and lucide.
+- `@palimp/core` — types, adapter interfaces, the three React contexts, and the collections
+  module re-exported. Cheap; no UI deps pulled in.
+- `@palimp/core/collections` — the collections module alone: `defineCollection`,
+  `collectionKey`, `parseCollectionDocument`, `serializeCollectionDocument` and their types.
+  Pure — no React at all — which is the point: the root entry re-exports the contexts, whose
+  `createContext` a server component may not import, so server-side code (`fe-next`'s
+  `collection()` and `<PalimpCollections>`) imports this subpath instead.
+- `@palimp/core/admin` — `EditComponent`, `Devtools`, `LoginPageCore`, `PalimpFields`,
+  `PalimpCollections`. Pulls in antd, `@tanstack/react-query`, and lucide.
 
 ## The contracts
 
@@ -153,6 +158,38 @@ This is a **placement** feature, not a second editor. The Devtools modal renders
 `EditComponent` per field, so modal edits land in the same `editsStore`, the same badge count and
 the same `setKeys` batch as inline ones. The save path needed no changes.
 
+### Collections
+
+The **Collections** button in the drawer opens a modal for editing registered collections —
+typed, repeatable entities whose schema the developer declares with `defineCollection` and whose
+items the owner adds, edits, duplicates, reorders and deletes. One collection is one storage key
+whose string value is a JSON document `{ "v": 1, "items": [...] }`; every change in the modal —
+a keystroke, a toggle, an add, a delete, a move — re-serializes the document into `editsStore`
+under that one key, riding the existing batched save. Design record:
+[docs/plans/collections/01-core.md](../../docs/plans/collections/01-core.md).
+
+The modal has **no Save button**, deliberately: there is exactly one save in palimp and it lives
+in the drawer. Drafting is per keystroke, so what the owner typed is what Save writes, and a
+failed save keeps it. The one escape hatch is **Discard changes** per collection — a single
+`editsStore.delete(key)` behind a confirm, because it discards every item's changes at once.
+
+Validation (the same `validateCollectionItems` the build uses) is display-only: it marks fields
+and items and never blocks a keystroke. The build side is stricter — `parseCollectionDocument`
+drops invalid items with a warning and never throws on data.
+
+Unlike the Fields modal, nothing in here is an `EditComponent`: the controls are ordinary antd
+inputs, nothing carries `[data-palimp-editor]`, and the interaction guard never sees their
+events — **Escape closes this modal normally**, where it does not close the Fields modal with
+the caret in a field.
+
+### `collectionsStore`
+
+The registry behind `PalimpCollections`, a near-copy of `fieldsStore`: a `Map` keyed by
+registration id, a listener `Set`, and a cached snapshot read through `useSyncExternalStore`,
+merged on write. One difference — deduplication is by **resolved storage key**, not by collection
+name, because `key` can be overridden on the schema and two names mapping to one key is the
+collision that actually matters. First registration wins, as with fields.
+
 ### `editsStore`
 
 A module-level singleton, not context: a `Map`, a `Set` of listeners, and a cached array
@@ -204,6 +241,27 @@ unnamed field.
 singleton, and every hook passes it explicitly, so Palimp works without a `QueryClientProvider`
 in the host app and never touches the host's own client. The cost: `logout()` calls
 `invalidateQueries()` with no key, invalidating everything in that client.
+
+**A collection is whole-document last-write-wins between two admins.** Two admins editing
+different items of one collection overwrite each other on save — the document is one key, and
+`setKeys` has no conditional write to express a version check. Today's per-key model has the
+same failure one level finer; recorded, not solved.
+
+**The badge counts a collection as one edit.** However many items changed, the collection is one
+`editsStore` entry, so adding three items and deleting a fourth is `Save (1)`. Teaching the badge
+about collections would mean teaching `editsStore` about its values, and not knowing them is why
+it has survived every feature unchanged. The compensation is local: a dirty dot on the
+collection's tab and a dirty mark per changed item.
+
+**An optional boolean cannot be returned to absent through the modal.** A `Switch` has no empty
+state, so once touched it is `true` or `false` forever. A field whose absence is meaningful
+should be a `number` or a `select`; a boolean that gates rendering wants `required: true` with a
+`default`.
+
+**`select` options that reach the schema through a widened variable degrade the inferred type to
+`string`.** `defineCollection`'s `const` type parameter keeps inline literals narrow with no
+`as const` — but an options array typed `string[]` somewhere upstream has already lost the
+literals, and the item type falls back to `string`.
 
 **`react` is a peer dependency; `@types/react` is a real one.** The package targets React 19 —
 it uses `use()` for context reads and the React 19 `<Context value={…}>` provider shorthand

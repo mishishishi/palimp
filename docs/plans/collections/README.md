@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phase 1 planned, nothing built · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phase 1 built (`pr/08-collections-01-core`), credentialed verification pending · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -56,7 +56,7 @@ are the ones that survived reading the source rather than the ones the explorati
 
 | phase | plan file | status |
 | --- | --- | --- |
-| 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19 | **planned; next: build it** |
+| 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
 | 2 — live admin rendering | `02-live-rendering.md` | waiting on phase 1 |
 | 3 — media seam | `03-media.md` | waiting on phase 1; independent of phase 2 |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |

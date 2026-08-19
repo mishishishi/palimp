@@ -8,8 +8,9 @@ This is the package a host app imports. It carries the framework-specific parts 
 
 ## Entry points
 
-- `@palimp/fe-next` — `palimp()`, `setBackendAdapter()`, `PalimpProvider`,
-  `PalimpBackendAdapterUnsetError`, and the `PalimpP` type
+- `@palimp/fe-next` — `palimp()`, `collection()`, `setBackendAdapter()`, `PalimpProvider`,
+  `PalimpCollections`, `PalimpBackendAdapterUnsetError`, the `PalimpP` type, and
+  `defineCollection` / `collectionKey` re-exported from `@palimp/core/collections`
 - `@palimp/fe-next/login` — `LoginPage`
 
 ## Usage
@@ -187,6 +188,64 @@ editors bind to the same pending edit and save together.
 Editing in the modal is the same `EditComponent` the page uses, feeding the same `editsStore`: the
 drawer's badge counts modal edits, and Save writes them in one batch with the inline ones.
 
+### Collections — typed, repeatable entities
+
+Where `PalimpFields` places editors for flat keys, collections model *lists of things* the owner
+grows and shrinks unaided: declare a schema in code, read the items in the page, register the
+schema so the Devtools **Collections** modal can edit them. One collection is one storage key
+whose value is a JSON document — add, delete and reorder are all "save the new document" on the
+ordinary batched save. Design record:
+[docs/plans/collections/01-core.md](../../docs/plans/collections/01-core.md).
+
+```ts
+// app/collections.ts
+import { defineCollection } from "@palimp/fe-next";
+
+export const varieties = defineCollection({
+  name: "varieties",
+  idField: "id",
+  fields: [
+    { name: "id", widget: "string", required: true, pattern: "^[a-z0-9-]+$", label: "Id (slug)" },
+    { name: "name", widget: "string", required: true, label: "Name" },
+    { name: "featured", widget: "boolean", label: "Featured" },
+  ],
+  defaultItems: [{ id: "gros-michel", name: "Gros Michel", featured: true }],
+});
+```
+
+Seven widgets (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`) with
+`required` / `pattern` / `min` / `max`. The item type is inferred — `defineCollection`'s `const`
+type parameter means `options: ["a", "b"]` narrows to `"a" | "b"` with no `as const` — and
+`defaultItems` is checked against it, so a bad seed fails `check-types`, not the build. An
+optional field's absence is meaningful and preserved: under `exactOptionalPropertyTypes` an
+explicit `undefined` is a compile error, clearing a control in the modal deletes the key, and
+`JSON.stringify` cannot express the difference anyway.
+
+```tsx
+// app/page.tsx — read in a server component, register beside <PalimpFields>
+const items = await collection(varieties);   // ReadonlyArray<{ id: string; name: string; featured?: boolean }>
+…
+{items.map((v) => (
+  <div key={v.id}>
+    <h3>{v.name}</h3>
+    <p>{p(`varieties.${v.id}.body`)}</p>      {/* prose stays a flat palimp key */}
+  </div>
+))}
+…
+<PalimpCollections collections={[varieties]} />
+```
+
+`collection()` rides the same `cache()`d read as `palimp()` and is usable in
+`generateStaticParams` — an owner-added item mints its per-slug routes at the next Publish.
+Invalid items are dropped with a `console.warn` carrying the greppable
+`palimp: collection "<name>"` prefix; the build never throws on data, and `defaultItems` is the
+fallback only when the document is missing or unreadable — never when the owner emptied it.
+
+**Item prose stays flat keys**, derived from the item's id (`varieties.<id>.body`, locale prefix
+in front where the host has one). Derived keys need no registration — the upsert creates rows on
+first save — and a fresh item's prose renders as its own key, with an inline editor already
+attached, until it is typed into.
+
 ### Adopting palimp in an app that already has a dictionary
 
 Most real hosts already have typed i18n dictionaries. **Keep them.** Pass the dictionary value as
@@ -259,6 +318,23 @@ time and, unlike `p()`'s element branch, never re-read in the browser: a string 
 hold a query. So an admin editing a page title sees the drawer count the edit and Save write it,
 while the `<title>` keeps the old value until the site is rebuilt. Inherent to the static-export
 premise, not fixable here.
+
+**`<PalimpCollections>` is the package's only server component and cannot be rendered inside a
+`"use client"` subtree.** The failure is Next's "async/await is not yet supported in Client
+Components", which does not obviously point back here. It is a server component deliberately —
+the `PalimpFields` shape would serialise `defaultItems`, the whole in-repo seed, into the flight
+payload on top of content already in the HTML. Resolving on the server ships a lean declaration
+plus exactly one copy of the item data: the stored row if there is one, the serialized seed if
+there is not (measured on the example: +698 bytes on `out/index.html` for the converted
+section). It awaits the same read as `palimp()`, so `setBackendAdapter()` must have run even on
+a page that never calls `palimp()` — same rule, same registration module.
+
+**A structural collection change reaches the page only at the next Publish.** A string edit
+appears immediately because each editor re-reads its key; an added or reordered item is
+server-rendered and has no such mechanism. The sharp version: adding an item *with prose* takes
+**two publish cycles** — add and Save, Publish, the card appears with its derived key as its
+body text, type the body inline, Save, Publish. Live structural rendering is phase 2 of the
+collections plan, and it is a different mechanism, not a missing flag here.
 
 **`<PalimpFields>` declarations ship to visitors in the RSC payload.** The component renders `null`
 for a visitor and loads no admin code — verified in a static export — but it is a client component

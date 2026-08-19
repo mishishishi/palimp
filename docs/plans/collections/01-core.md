@@ -719,3 +719,66 @@ Ask for real Supabase or Firebase credentials rather than reporting the feature 
 and a static export alone. **If item 6 was not run, the landing note says so, item by item** — that
 is the house rule from [host-adoption.md](../host-adoption.md) and the reason its own divergence
 notes are trustworthy.
+
+---
+
+## Divergence note (2026-08-19, implementation)
+
+Built as specified, with the following departures — each found by building, none by preference.
+
+1. **`@palimp/core` grew a third entry point, `./collections`.** The module still lives at the
+   package root and is still re-exported from `index.ts` as planned — but the root entry also
+   re-exports the three React contexts, and a module that calls `createContext` cannot be
+   imported from a server component. `collection()` and `<PalimpCollections>` are exactly that,
+   so the static-export build (verification item 3) failed until server-side code had a pure
+   subpath to import. Nothing about the design moved; the plan's "importable from a server
+   component" claim just turned out to require its own `exports` entry, not only root placement.
+2. **The shared validator is two exported layers, not one function.** The plan had the modal and
+   the build sharing `parseCollectionDocument`. But parse *drops* invalid items, and §B also says
+   modal validation is display-only and must keep them editable — one function cannot do both.
+   Shipped: `readCollectionDocument` (the shape gate, rows 2–3) and `validateCollectionItems`
+   (per-item problems plus the unknown-key restriction), with `parseCollectionDocument` composed
+   from them. Build and modal still agree by construction; they just share the two halves rather
+   than the composition.
+3. **The §E payload estimate held in the props but not in the framing: measured +698 bytes, not
+   +304.** Stub-adapter static export, `out/index.html`: 25,439 → 26,137. The registration row
+   carries the estimated prop bytes plus flight overhead the estimate excluded by its own
+   admission — the client-module reference row (~167 B) and the double escaping of
+   `staleDocument` inside the flight string. `defaultItems` confirmed absent from the payload
+   when a row exists; the visitor HTML carries no editor markup; the modal code appears in
+   exactly one chunk, which no eager script tag references.
+4. **The §G snippet's inline spread does not compile.** `varietyBodies[v.id]` is
+   `string | undefined` under `noUncheckedIndexedAccess`, and truthiness does not narrow an
+   element access whose key is a property chain — so the lookup is hoisted to a
+   `const body = varietyBodies[v.id]` and the spread tests that. Same pattern, one line earlier.
+5. **Small unplanned decisions, recorded:** `<PalimpCollections>` awaits `loadMessages()` once
+   and maps, rather than a per-schema `resolveDocument` (equivalent, one read either way);
+   **duplicate** copies the item verbatim, so the copy is immediately marked invalid (duplicate
+   id, first occurrence wins) until renamed; a new item applies declared `default`s, starts a
+   required string at `""` and a required boolean at `false`, and leaves a required number or
+   select absent — inventing a value would be the coercion §B rejects; the type-fixture file is
+   `app/collections.fixtures.ts`, and the TS2375 case's `@ts-expect-error` sits above the whole
+   declaration because that is where the compiler reports it.
+
+**Landing notes.** The six `varieties.one.*` … `varieties.three.*` rows become orphans in both
+demo databases — there is no delete primitive, so they stay; not new (any renamed key does it)
+but first visible here. Verification status, item by item: 1, 2, 3 and 5 ran and pass (the
+validator fixtures cover all seven §B cases plus round-trip, pattern and warn-once). **Items 4
+and 6 ran 2026-08-20 against real Supabase credentials**, CDP-driving a signed-in session in the
+dev server: add / edit / duplicate / reorder / delete with selection following the item
+throughout; per-keystroke drafts with the tab dot and per-item dirty marks; the badge counting
+the collection as one entry; **one** `setKeys` POST carrying the document and the derived
+`varieties.gros-michel.body` prose key together; an aborted save retaining both drafts and the
+reopened modal still showing them; Discard restoring the fetched document and clearing the badge
+entry; Escape closing the collections modal with the caret in a field; a fresh item's card
+rendering its own derived key with an inline editor attached after reload; and a cleared
+optional number saving as an absent key (`rank: 7` → cleared → key gone, never `null`). The
+stored row round-trips as a string with a unicode-plus-quotes item name and a
+newline-plus-quotes prose body intact. A real Publish was also fired from the drawer:
+the dispatch returned 204, the drawer entered its "Publishing..." state, and the Pages deploy
+completed successfully (confirmed by the user on GitHub; the drawer's own completion icon was not
+re-checked) — but the workflow builds `main`, which predates this branch, so the deployed site
+correctly shows the old cards. **Still not run:** the Firestore half of item 4 (no Firebase credentials were available);
+the added-item-renders-after-rebuild half of the Publish check, which stays unexercisable until
+this branch is what the deploy workflow builds; and the per-slug `generateStaticParams` check,
+which the examples cannot exercise — neither has a per-slug route.

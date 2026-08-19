@@ -7,9 +7,11 @@ import { usePublishButton } from "./usePublishButton";
 import { usePublishRun } from "./usePublishRun";
 import { useSaveButton } from "./useSaveButton";
 import { useDevtools } from "./DevtoolsContext";
-import { ListChecks, LogOut } from "lucide-react";
+import { Boxes, ListChecks, LogOut } from "lucide-react";
 import { useFieldGroups } from "../fieldsStore";
 import { FieldsModal } from "./FieldsModal";
+import { useCollections } from "../collectionsStore";
+import { CollectionsModal } from "./CollectionsModal";
 
 export const DevtoolsContent = () => {
   const { user, logout } = useDevtools();
@@ -20,9 +22,12 @@ export const DevtoolsContent = () => {
   const { data: run } = usePublishRun();
   const [modalOpen, setModalOpen] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [collectionsOpen, setCollectionsOpen] = useState(false);
 
   const groups = useFieldGroups();
   const fieldCount = groups.reduce((n, g) => n + g.fields.length, 0);
+
+  const collections = useCollections();
 
   const publishLabel = !publish.available
     ? "No publish provider"
@@ -54,6 +59,22 @@ export const DevtoolsContent = () => {
       </Button>
 
       <FieldsModal open={fieldsOpen} onClose={() => setFieldsOpen(false)} />
+
+      <Button
+        block
+        icon={<Boxes size={16} strokeWidth={1.2} />}
+        onClick={() => setCollectionsOpen(true)}
+        disabled={collections.length === 0}
+      >
+        {collections.length === 0
+          ? "No collections"
+          : `Collections (${collections.length})`}
+      </Button>
+
+      <CollectionsModal
+        open={collectionsOpen}
+        onClose={() => setCollectionsOpen(false)}
+      />
 
       <div style={{ flex: "1 1 0" }} />
 

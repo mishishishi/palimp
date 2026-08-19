@@ -274,6 +274,18 @@ Points worth knowing:
   second editor.
 - **A failed save keeps the edits.** `setKeys` throwing skips `editsStore.clear()`, so the
   drawer still holds everything the user typed.
+- **Collections put a JSON document in a key — the one class of key whose `value` is not prose.**
+  A collection (`defineCollection` in [libs/core/src/collections.ts](../libs/core/src/collections.ts))
+  is one storage key holding `{ "v": 1, "items": [...] }` as a **string**, so `Message` and both
+  backends stay untouched: the document *is* the enumeration, and add / delete / reorder are all
+  "save the new document" — one `editsStore` entry in the same batch as prose edits. The build
+  reads it through `collection()` beside `palimp()`, drops invalid items with a warning, and
+  never throws on data. Item prose is not in the document; it stays flat keys derived from the
+  item id (`varieties.<id>.body`). One asymmetry worth knowing: the Devtools **Collections**
+  modal is built from plain antd inputs, not `EditComponent`s, so the interaction guard never
+  sees its events and Escape closes it normally — while the **Fields** modal, whose editors are
+  marked, is inside the guard's reach. Design record:
+  [plans/collections/01-core.md](plans/collections/01-core.md).
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved
   edits. It shows how the page will look, not how it currently is.
 - **A window-capture guard keeps a nested editor inert.** An editor can land inside an `<a>`, a
