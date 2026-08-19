@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phase 1 built (`pr/08-collections-01-core`), credentialed verification pending · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phase 1 built and verified on Supabase (`pr/08-collections-01-core`); phase 2 planned, awaiting review · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -40,9 +40,12 @@ was evaluated as the buy option and stays the acknowledged fallback if media dom
 Gate decisions the phases depend on. Answers get recorded here (date + one line of why); a phase
 plan may resolve the ones it is gated on as its first section.
 
-All five were answered **2026-08-19**, in the phase-1 planning session and before
+D1–D5 were answered **2026-08-19**, in the phase-1 planning session and before
 [01-core.md](01-core.md) was written. Each matched the exploration's leaning, but the reasons below
 are the ones that survived reading the source rather than the ones the exploration gave.
+D6–D8 were answered **2026-08-20**, in the phase-2 planning session and before
+[02-live-rendering.md](02-live-rendering.md) was written; two of the three were decided by
+measuring a prototype rather than by argument.
 
 | # | question | answer (2026-08-19) | why |
 | --- | --- | --- | --- |
@@ -51,13 +54,16 @@ are the ones that survived reading the source rather than the ones the explorati
 | D3 | Is the live list wrapper in scope for v1? | **No** — phase 1 is modal-only | Strings are live only because each `EditComponent` re-reads its key; a server-rendered list has no analogous mechanism, so phase 2 is a different mechanism, not a smaller phase 1 |
 | D4 | Build policy for an invalid document | **Never throw**: drop invalid items with a loud warning; `defaultItems` only when the document fails to parse or fails its shape check | Palimp's one build-time throw is a wiring error, never a data one, and `p()` answers a missing key by rendering the key — dropping loudly is that instinct one level up |
 | D5 | Widget vocabulary | **The minimal seven**, Sveltia-named (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`) | `object` and `list` are the two that cannot be retrofitted without reworking the item inference; the rest of Sveltia's vocabulary can arrive whenever a host asks |
+| D6 | RSC boundary for live rendering (2026-08-20) | **One client card, used on both sides** — the host's item renderer is a client component, passed by module reference and also used to render the baked children | Measured: the dual-render alternative pays +795 B of payload and *still* ships the card chunk eagerly, because a client-module reference in the flight payload pulls its chunk in even unrendered |
+| D7 | Preview mode × live list (2026-08-20) | **The live list stays live in preview**, with zero preview-specific code | Preview means "how the page will look", which after the next Save-and-Publish includes pending structure; `EditComponent`'s existing preview branch handles the prose, so correctness falls out of composition |
+| D8 | Does the wrapper also register the collection? (2026-08-20) | **Yes** — `<PalimpCollectionList>` registers into `collectionsStore`; `<PalimpCollections>` stays for modal-only collections | The wrapper needs the declaration and document anyway, and the measured prototype shipped `staleDocument` twice when the two stayed separate; the store's dedup-by-key makes accidental coexistence harmless |
 
 ## Phase map
 
 | phase | plan file | status |
 | --- | --- | --- |
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
-| 2 — live admin rendering | `02-live-rendering.md` | waiting on phase 1 |
+| 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20 | **planned, awaiting review; not yet built** |
 | 3 — media seam | `03-media.md` | waiting on phase 1; independent of phase 2 |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
 
@@ -130,11 +136,14 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Implement phase 1** per [01-core.md](01-core.md), on a branch off `pr/08-collections`. Read
-   its verification list first — item 6 needs real credentials, and the landing note has to say
-   item by item what was and was not run. Land with the lockstep version bump inside the feature
-   commit and the package-README quirks sections updated.
-2. Append the divergence note to `01-core.md` and update the tables above.
-3. **Then plan phase 2.** Its plan should open with the cost `01-core.md` §H names — an added item
-   with prose takes two publish cycles — rather than with the payload measurement. Phase 3 is
-   independent of phase 2 and can be planned in either order.
+1. **Review [02-live-rendering.md](02-live-rendering.md)** — written 2026-08-20, nothing built or
+   committed from it yet.
+2. **Implement phase 2** per that plan, on its own branch off `pr/08-collections` (phase 1 sits on
+   `pr/08-collections-01-core`, not yet merged into it — decide the base when branching). Lockstep
+   version bump inside the feature commit; package-README quirks sections updated; verification
+   item 5 needs real credentials, and the landing note says item by item what ran.
+3. Append the divergence note to `02-live-rendering.md` and update the tables above.
+4. **Then plan phase 3 (media seam)** — independent of phase 2's implementation order. Phase 1
+   also still carries two unrun items to close when circumstances allow: the Firestore round-trip
+   (needs Firebase credentials) and the added-item-renders-after-rebuild Publish check (needs a
+   collections branch to be what the deploy workflow builds).
