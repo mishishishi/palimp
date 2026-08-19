@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** direction proposed, nothing built · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phase 1 planned, nothing built · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -40,19 +40,23 @@ was evaluated as the buy option and stays the acknowledged fallback if media dom
 Gate decisions the phases depend on. Answers get recorded here (date + one line of why); a phase
 plan may resolve the ones it is gated on as its first section.
 
-| # | question | leaning (from the exploration) | status |
+All five were answered **2026-08-19**, in the phase-1 planning session and before
+[01-core.md](01-core.md) was written. Each matched the exploration's leaning, but the reasons below
+are the ones that survived reading the source rather than the ones the exploration gave.
+
+| # | question | answer (2026-08-19) | why |
 | --- | --- | --- | --- |
-| D1 | Build natively, or buy (embed Sveltia)? | Build; adopt Sveltia's field vocabulary; Sveltia stays the media fallback | **open** — gates phase 1 |
-| D2 | Storage key namespace | `collection.<name>`, definition carries the key; no locale prefix on collection keys (entities are locale-free) | **open** — gates phase 1 |
-| D3 | Is the live list wrapper in scope for v1? | No — phase 2, so phase 1 ships modal-only editing | **open** — gates phases 1–2 |
-| D4 | Build policy for an invalid document | Strict validation in the modal; at build drop invalid items with a loud log, `defaultItems` only on parse failure | **open** — gates phase 1 |
-| D5 | Widget vocabulary | The minimal seven (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`), Sveltia-named | **open** — gates phase 1 |
+| D1 | Build natively, or buy (embed Sveltia)? | **Build**, borrowing Sveltia's field vocabulary; Sveltia stays the fallback if media becomes central | `editsStore`, `setKeys` and `getKey` absorb the whole feature with no contract change, and the Fields modal already proves a structured editor needs no save-path change |
+| D2 | Storage key namespace | **`collection.<name>`**, with a `key` override on the schema; never locale-prefixed | Nothing in the workspace parses a key, so the namespace collides with nothing; entities are locale-free, their prose is not |
+| D3 | Is the live list wrapper in scope for v1? | **No** — phase 1 is modal-only | Strings are live only because each `EditComponent` re-reads its key; a server-rendered list has no analogous mechanism, so phase 2 is a different mechanism, not a smaller phase 1 |
+| D4 | Build policy for an invalid document | **Never throw**: drop invalid items with a loud warning; `defaultItems` only when the document fails to parse or fails its shape check | Palimp's one build-time throw is a wiring error, never a data one, and `p()` answers a missing key by rendering the key — dropping loudly is that instinct one level up |
+| D5 | Widget vocabulary | **The minimal seven**, Sveltia-named (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`) | `object` and `list` are the two that cannot be retrofitted without reworking the item inference; the rest of Sveltia's vocabulary can arrive whenever a host asks |
 
 ## Phase map
 
 | phase | plan file | status |
 | --- | --- | --- |
-| 1 — collections core | `01-core.md` — not yet written | **next: plan it** |
+| 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19 | **planned; next: build it** |
 | 2 — live admin rendering | `02-live-rendering.md` | waiting on phase 1 |
 | 3 — media seam | `03-media.md` | waiting on phase 1; independent of phase 2 |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
@@ -126,8 +130,11 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Answer D1–D5**, or start the phase-1 planning session and resolve them as its first section.
-2. **New session: write `01-core.md`** against [00-exploration.md](00-exploration.md) §A–§D and
-   this file's phase-1 scope.
-3. Implement phase 1 per its plan, on a branch off `pr/08-collections`; land with a divergence
-   note and update the tables here.
+1. **Implement phase 1** per [01-core.md](01-core.md), on a branch off `pr/08-collections`. Read
+   its verification list first — item 6 needs real credentials, and the landing note has to say
+   item by item what was and was not run. Land with the lockstep version bump inside the feature
+   commit and the package-README quirks sections updated.
+2. Append the divergence note to `01-core.md` and update the tables above.
+3. **Then plan phase 2.** Its plan should open with the cost `01-core.md` §H names — an added item
+   with prose takes two publish cycles — rather than with the payload measurement. Phase 3 is
+   independent of phase 2 and can be planned in either order.
