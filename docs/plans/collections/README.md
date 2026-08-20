@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phase 1 built and verified on Supabase (`pr/08-collections-01-core`); phase 2 planned, awaiting review · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phase 1 built and verified on Supabase (merged); phase 2 built and verified incl. the credentialed pass on `pr/08-collections-02-live-rendering`, awaiting merge · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -63,7 +63,7 @@ measuring a prototype rather than by argument.
 | phase | plan file | status |
 | --- | --- | --- |
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
-| 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20 | **planned, awaiting review; not yet built** |
+| 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built on `pr/08-collections-02-live-rendering`; verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
 | 3 — media seam | `03-media.md` | waiting on phase 1; independent of phase 2 |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
 
@@ -136,14 +136,9 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Review [02-live-rendering.md](02-live-rendering.md)** — written 2026-08-20, nothing built or
-   committed from it yet.
-2. **Implement phase 2** per that plan, on its own branch off `pr/08-collections` (phase 1 sits on
-   `pr/08-collections-01-core`, not yet merged into it — decide the base when branching). Lockstep
-   version bump inside the feature commit; package-README quirks sections updated; verification
-   item 5 needs real credentials, and the landing note says item by item what ran.
-3. Append the divergence note to `02-live-rendering.md` and update the tables above.
-4. **Then plan phase 3 (media seam)** — independent of phase 2's implementation order. Phase 1
-   also still carries two unrun items to close when circumstances allow: the Firestore round-trip
-   (needs Firebase credentials) and the added-item-renders-after-rebuild Publish check (needs a
-   collections branch to be what the deploy workflow builds).
+1. **Merge `pr/08-collections-02-live-rendering` into `pr/08-collections`** — the credentialed
+   pass ran 2026-08-21 and passed; the merge is the user's call.
+2. **Then plan phase 3 (media seam)** — independent of phase 2. Unrun items to close when
+   circumstances allow: the Firestore round-trip (needs Firebase credentials), and the
+   added-item-renders-after-rebuild Publish check (needs a collections branch to be what the
+   deploy workflow builds) — shared by phases 1 and 2.

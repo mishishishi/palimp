@@ -20,7 +20,7 @@ Three, and the split matters — see [Quirks](#quirks).
   `createContext` a server component may not import, so server-side code (`fe-next`'s
   `collection()` and `<PalimpCollections>`) imports this subpath instead.
 - `@palimp/core/admin` — `EditComponent`, `Devtools`, `LoginPageCore`, `PalimpFields`,
-  `PalimpCollections`. Pulls in antd, `@tanstack/react-query`, and lucide.
+  `PalimpCollections`, `LiveCollectionList`. Pulls in antd, `@tanstack/react-query`, and lucide.
 
 ## The contracts
 
@@ -182,9 +182,32 @@ inputs, nothing carries `[data-palimp-editor]`, and the interaction guard never 
 events — **Escape closes this modal normally**, where it does not close the Fields modal with
 the caret in a field.
 
+### `LiveCollectionList`
+
+The live half of `fe-next`'s `<PalimpCollectionList>`: renders the *working* collection document
+— `pending ?? fetched ?? staleDocument`, the modal's own chain on the same query key
+`useSaveButton` invalidates — mapped through a host-supplied item component, so structural
+changes appear on the admin's page as they are drafted and the list refreshes after a save with
+no save-path change. Loaded only through `next/dynamic`, and it registers the collection into
+`collectionsStore` itself, so the page needs no separate `PalimpCollections` for it.
+
+It parses like the **build**, not like the modal: `readCollectionDocument`, then
+`validateCollectionItems`, and invalid items are **dropped** — silently, because the modal
+already marks the same items via the same validator on the surface where the owner can act. The
+admin's page therefore equals the next Publish. An unreadable document renders the `children`
+(the baked fragment, the last known-good render); an empty *valid* document renders an empty
+list, not the children — the owner deleted the items. Elements are keyed by item id, so a
+reorder moves DOM nodes and a focused inline editor survives it.
+
+One asymmetry inherited from phase 1, now with a second half: the live cards' prose editors are
+real `EditComponent`s, so the **interaction guard covers them** — a live card inside a host
+`<a>` or click-handling ancestor is exactly the case the guard exists for — while the *modal's*
+controls remain plain antd inputs outside the guard's reach.
+
 ### `collectionsStore`
 
-The registry behind `PalimpCollections`, a near-copy of `fieldsStore`: a `Map` keyed by
+The registry behind `PalimpCollections` (and `LiveCollectionList`, which registers the same
+way), a near-copy of `fieldsStore`: a `Map` keyed by
 registration id, a listener `Set`, and a cached snapshot read through `useSyncExternalStore`,
 merged on write. One difference — deduplication is by **resolved storage key**, not by collection
 name, because `key` can be overridden on the schema and two names mapping to one key is the

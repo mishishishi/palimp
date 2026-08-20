@@ -1,6 +1,11 @@
-import { PalimpCollections, PalimpFields } from "@palimp/fe-next";
+import {
+  collectionItemKey,
+  PalimpCollectionList,
+  PalimpFields,
+} from "@palimp/fe-next";
 import { type Metadata } from "next";
 import { varieties, varietyBodies } from "./collections.ts";
+import { VarietyCard } from "./VarietyCard.tsx";
 import {
   FixtureAnchor,
   FixtureForm,
@@ -84,26 +89,32 @@ export default async function Page() {
           {p("varieties.title", { defaultMessage: "What we grow" })}
         </h2>
         <div style={styles.cards}>
-          {items.map((v) => {
-            // Hoisted because element-access narrowing needs a const key:
-            // noUncheckedIndexedAccess makes the lookup string | undefined,
-            // and the spread is the exactOptionalPropertyTypes house pattern.
-            const body = varietyBodies[v.id];
+          {/*
+            The children are the baked fragment — what visitors get, mapped on
+            the server where p() can resolve each body against the stored
+            rows. For an admin the wrapper swaps them for a live map of the
+            same card, so a structural change appears before any Publish. The
+            wrapper is also the registrar: no separate <PalimpCollections>.
+          */}
+          <PalimpCollectionList collection={varieties} itemComponent={VarietyCard}>
+            {items.map((v) => {
+              // Hoisted because element-access narrowing needs a const key:
+              // noUncheckedIndexedAccess makes the lookup string | undefined,
+              // and the spread is the exactOptionalPropertyTypes house pattern.
+              const body = varietyBodies[v.id];
 
-            return (
-              <div key={v.id} style={styles.card}>
-                <h3 style={styles.cardTitle}>
-                  {v.name}
-                  {v.featured ? " ★" : ""}
-                </h3>
-                <p style={styles.cardBody}>
-                  {p(`varieties.${v.id}.body`, {
+              return (
+                <VarietyCard
+                  key={v.id}
+                  item={v}
+                  staleBody={p(collectionItemKey(varieties, v.id, "body"), {
                     ...(body ? { defaultMessage: body } : {}),
+                    asString: true,
                   })}
-                </p>
-              </div>
-            );
-          })}
+                />
+              );
+            })}
+          </PalimpCollectionList>
         </div>
       </section>
 
@@ -195,14 +206,6 @@ export default async function Page() {
       */}
       <PalimpFields group="SEO" fields={seoFields} />
 
-      {/*
-        Also renders nothing on the page. Registers the collection for the
-        Devtools "Collections" modal — resolved on the server so the flight
-        payload carries the declaration plus one copy of the item data, never
-        defaultItems on top of a stored row.
-      */}
-      <PalimpCollections collections={[varieties]} />
-
       <footer style={styles.footer}>
         <span>
           {p("footer.copy", {
@@ -290,23 +293,6 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "1.25rem",
     marginTop: "1.5rem",
-  },
-  card: {
-    background: "#fff8d6",
-    border: "1px solid #ecdf8c",
-    borderRadius: "10px",
-    padding: "1.25rem 1.25rem 1.5rem",
-  },
-  cardTitle: {
-    margin: "0 0 0.5rem",
-    fontSize: "1.15rem",
-    fontWeight: 700,
-  },
-  cardBody: {
-    margin: 0,
-    fontSize: "0.97rem",
-    lineHeight: 1.55,
-    color: "#4a4a30",
   },
   details: {
     marginTop: "1.5rem",

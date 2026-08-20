@@ -146,6 +146,10 @@ export const collectionKey = (
   schema: Pick<AnyCollectionSchema, "name" | "key">,
 ): string => schema.key ?? `collection.${schema.name}`;
 
+// The item-prose key helper lives in its own module (see the comment there
+// for the measured bundling reason) but stays part of this entry's surface.
+export { collectionItemKey } from "./collectionItemKey.ts";
+
 // ---------------------------------------------------------------------------
 // The document format.
 

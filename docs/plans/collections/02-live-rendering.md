@@ -487,3 +487,77 @@ Both examples, identically (the guard-fixture section stays supabase-only, as in
      the one-cycle flow this plan opened with. The added-item-renders-after-rebuild half stays
      unexercisable until this branch is what the deploy workflow builds, and if so the landing
      note says so, item by item, as phase 1's does.
+
+---
+
+## Divergence note (2026-08-20, implementation)
+
+Built as specified, with the following departures — each found by measuring, none by preference.
+
+1. **`collectionItemKey` lives in its own module, `libs/core/src/collectionItemKey.ts`,
+   re-exported through `./collections`.** The plan placed it in `collections.ts`, beside
+   `collectionKey`. Built that way, the §E budget broke: the helper is the one collections
+   function client cards call, bundling is module-granular, and the card's import dragged the
+   whole parse ladder into the visitor's eager JS. Same entry, same imports, same surface — the
+   function just sits in a file the validator does not.
+2. **`@palimp/core` and `@palimp/fe-next` now declare `"sideEffects": false`.** The other half of
+   the same finding: a `"use client"` card importing `PalimpText` / `collectionItemKey` from the
+   fe-next index shipped every statically-imported module in the barrel — `palimp.tsx` and the
+   server components included — because nothing told the bundler the packages were side-effect
+   free. They are (module-level state is reachable only through exports), and saying so is what
+   makes the index barrel safe to import from client code at all. Before both fixes the measured
+   eager-JS delta was **+5,263 B** against the plan's ≈ +1.5 KB; after, **+580 B**.
+3. **§E re-measured, and the chosen shape did better than the prototype** (stub-adapter static
+   export, §E conditions; baseline re-measured at 33a1243 with the same stub, matching §E's
+   eager-JS figure to the byte): visitor `out/index.html` 26,039 → 24,917 (**−1,122 B**, below
+   §E's −507 B exactly as D8 predicted, the second `staleDocument` copy being gone); eager JS
+   643,733 → 644,313 (**+580 B**, under the ≈ +1.5 KB budget — the `sideEffects` flag also shook
+   phase-1 modules out of chunks that never used them); `staleDocument` **once** per collection
+   in the payload; the card chunk eager and referenced by both sides as one module (`$21` /
+   `$L21` in the flight payload); parse and admin code in lazy chunks only; antd, react-query and
+   lucide absent from all eleven eager scripts (and present in lazy ones, so the grep proves
+   something); no editor markup in the visitor HTML.
+4. **Small unplanned decisions, recorded:** the three §A type fixtures call
+   `PalimpCollectionList` as a plain function — the fixture file is `.ts`, JSX is unavailable,
+   and the props typecheck identically; the wrong-item fixture writes `{ slug: number }` rather
+   than the plan's `{ id: number }`, because the fixture schema's id field is `slug`; the
+   fe-next README's phase-1 "+698 bytes" note left with the quirk it lived in, since the example
+   no longer registers through `<PalimpCollections>` and the number no longer describes the page.
+
+**Landing notes.** Verification status, item by item: **1, 2 and 3 ran and pass** (the three new
+`@ts-expect-error` fixtures compiled-and-failed as specified; the measurements are recorded
+above). A full static export against the real Supabase table also ran: the stored document —
+phase 1's `test-unicode` item included — renders through the wrapper at build. **Items 4 and 5
+ran 2026-08-21 against real Supabase credentials**, CDP-driving a signed-in session in the dev
+server, and pass:
+
+- **Item 4** — a scratch page rendering both `<PalimpCollectionList>` and `<PalimpCollections>`
+  for `varieties` registered it once: the drawer read `Collections (1)` and the modal showed
+  exactly one tab.
+- **Add → one Save, one Publish**: the added item's card appeared on the page **before any
+  Save**, its inline editor's placeholder the derived `varieties.pisang-raja.body`; the body was
+  typed inline; the badge went `Save (1)` → `Save (2)`; and the save was **one** `setKeys` POST
+  (`/rest/v1/inline?on_conflict=key`) carrying the document and the prose row together.
+- **Liveness**: a fact edited in the modal updated the card per keystroke (observed at every
+  keypress); reorder and delete reflected immediately; **key-by-id held** — a marked textarea
+  DOM node survived its card's reorder as the same node. One honest caveat: the "focused prose
+  editor survives reorder" line cannot be exercised literally, because antd's modal traps focus
+  — a page editor cannot *hold* focus while the modal (where reorder lives) is open at all; the
+  mechanism the line names, node identity under reorder, is what was verified.
+- **Save-path behaviour**: a failed save (aborted POST) kept `Save (2)` and both drafts visible
+  on the page; the subsequent real save cleared the badge and the list re-read correctly
+  through the invalidation loop, typed body intact. **Discard changes** snapped a
+  rename+reorder+delete draft back to the fetched document and cleared the badge.
+- **Preview**: showed the pending structure as plain cards — six cards including a never-saved
+  draft item, zero editors — with typed prose as text; the documented wrinkle confirmed: the
+  untyped fresh item's body previewed **empty**, where the published page would render the key.
+- **Guard**: in a live card inside an `<a href>`, a trusted click focused the editor without
+  navigating, typing entered the draft, and middle-click stayed inert.
+- Fresh page loads produced zero console errors (no hydration mismatch from the
+  children-to-live-list swap).
+
+**Still not run:** the Publish step (item 5's last line) — its added-item-renders-after-rebuild
+half stays unexercisable until this branch is what the deploy workflow builds, as phase 1's note
+already records, and the dispatch path itself was demonstrated in phase 1. The demo database now
+holds the `pisang-raja` item and its prose row, left in deliberately like phase 1's test data;
+the prose row would outlive any later deletion of the item, since no delete primitive exists.

@@ -8,7 +8,12 @@
  *
  * Nothing imports this module; it exists to be typechecked.
  */
-import { defineCollection, type CollectionItem } from "@palimp/fe-next";
+import {
+  defineCollection,
+  PalimpCollectionList,
+  type CollectionItem,
+} from "@palimp/fe-next";
+import type { ComponentType } from "react";
 
 const fixture = defineCollection({
   name: "fixture",
@@ -78,3 +83,36 @@ export const case4 = defineCollection({
 // call site (TS2322).
 // @ts-expect-error — `"nope"` is not assignable to the options union
 export const case5: FixtureItem = { slug: "a", segment: "nope" };
+
+// --- Phase 2: the <PalimpCollectionList> boundary, the three §A cases from
+// docs/plans/collections/02-live-rendering.md. The component is called as a
+// plain (async) function because this file is .ts — the props typecheck is the
+// same either way.
+
+// 6 — extra *optional* props are the pattern: the baked side supplies them,
+// the live map supplies only `item`, and the card behaves sensibly without.
+declare const goodCard: ComponentType<{ item: FixtureItem; staleBody?: string }>;
+export const case6 = PalimpCollectionList({
+  collection: fixture,
+  itemComponent: goodCard,
+  children: null,
+});
+
+// 7 — a card that *requires* a server-supplied prop would render wrongly in
+// the live map, which can never supply it; the compiler rejects it here.
+declare const needyCard: ComponentType<{ item: FixtureItem; staleBody: string }>;
+export const case7 = PalimpCollectionList({
+  collection: fixture,
+  // @ts-expect-error — the live map cannot supply the required `staleBody`
+  itemComponent: needyCard,
+  children: null,
+});
+
+// 8 — the card's item type must match the schema's inference.
+declare const wrongItemCard: ComponentType<{ item: { slug: number } }>;
+export const case8 = PalimpCollectionList({
+  collection: fixture,
+  // @ts-expect-error — `slug` is a string in the inferred item type
+  itemComponent: wrongItemCard,
+  children: null,
+});

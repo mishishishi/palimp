@@ -1,6 +1,7 @@
 export * from "./types.ts";
 export {
   COLLECTION_DOCUMENT_VERSION,
+  collectionItemKey,
   collectionKey,
   defineCollection,
   formatCollectionProblem,

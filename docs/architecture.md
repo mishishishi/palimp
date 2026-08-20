@@ -281,11 +281,17 @@ Points worth knowing:
   "save the new document" — one `editsStore` entry in the same batch as prose edits. The build
   reads it through `collection()` beside `palimp()`, drops invalid items with a warning, and
   never throws on data. Item prose is not in the document; it stays flat keys derived from the
-  item id (`varieties.<id>.body`). One asymmetry worth knowing: the Devtools **Collections**
-  modal is built from plain antd inputs, not `EditComponent`s, so the interaction guard never
-  sees its events and Escape closes it normally — while the **Fields** modal, whose editors are
-  marked, is inside the guard's reach. Design record:
-  [plans/collections/01-core.md](plans/collections/01-core.md).
+  item id (`varieties.<id>.body`, computed by `collectionItemKey`). Structural liveness is
+  opt-in per list through `<PalimpCollectionList>`: the `EditComponent` re-read mechanism one
+  level up, admin-only — the wrapper resolves `pending ?? fetched ?? staleDocument` on the same
+  query key and maps a host-supplied client card over the surviving items, while visitors get
+  the baked children the build produced. One asymmetry worth knowing: the Devtools
+  **Collections** modal is built from plain antd inputs, not `EditComponent`s, so the
+  interaction guard never sees its events and Escape closes it normally — while the **Fields**
+  modal, whose editors are marked, is inside the guard's reach (and the live cards' inline
+  prose editors are too). Design records:
+  [plans/collections/01-core.md](plans/collections/01-core.md),
+  [plans/collections/02-live-rendering.md](plans/collections/02-live-rendering.md).
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved
   edits. It shows how the page will look, not how it currently is.
 - **A window-capture guard keeps a nested editor inert.** An editor can land inside an `<a>`, a

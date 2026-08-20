@@ -9,8 +9,9 @@ This is the package a host app imports. It carries the framework-specific parts 
 ## Entry points
 
 - `@palimp/fe-next` — `palimp()`, `collection()`, `setBackendAdapter()`, `PalimpProvider`,
-  `PalimpCollections`, `PalimpBackendAdapterUnsetError`, the `PalimpP` type, and
-  `defineCollection` / `collectionKey` re-exported from `@palimp/core/collections`
+  `PalimpCollections`, `PalimpCollectionList`, `PalimpText`, `PalimpBackendAdapterUnsetError`,
+  the `PalimpP` type, and `defineCollection` / `collectionKey` / `collectionItemKey` re-exported
+  from `@palimp/core/collections`
 - `@palimp/fe-next/login` — `LoginPage`
 
 ## Usage
@@ -242,9 +243,81 @@ Invalid items are dropped with a `console.warn` carrying the greppable
 fallback only when the document is missing or unreadable — never when the owner emptied it.
 
 **Item prose stays flat keys**, derived from the item's id (`varieties.<id>.body`, locale prefix
-in front where the host has one). Derived keys need no registration — the upsert creates rows on
-first save — and a fresh item's prose renders as its own key, with an inline editor already
-attached, until it is typed into.
+in front where the host has one). `collectionItemKey(collection, id, suffix)` computes the key —
+pass the schema on the server, the bare *name* in a client card (see the quirks) — so the two
+sides cannot drift into template literals that happen to agree. Derived keys need no
+registration — the upsert creates rows on first save — and a fresh item's prose renders as its
+own key, with an inline editor already attached, until it is typed into.
+
+A collection rendered this way is a plain server map: a structural change reaches the page at the
+next Publish. For the admin to see it immediately, wrap the map in
+[`<PalimpCollectionList>`](#palimpcollectionlist--live-rendering-for-the-admin).
+
+### `<PalimpCollectionList>` — live rendering for the admin
+
+Wrap the baked map in the list wrapper and hand it the item renderer, and a structural change —
+add, remove, reorder, a fact edited in the modal — appears on the admin's page immediately,
+drafts included, the way string edits always have. A fresh item's card arrives with its prose
+editor already inline, so add-item-with-prose is **one** Save and **one** Publish. Visitors keep
+the baked fragment the build produced. Design record:
+[docs/plans/collections/02-live-rendering.md](../../docs/plans/collections/02-live-rendering.md).
+
+The host writes its card once, as a **client** component, and it renders both sides — the baked
+children on the server, the live map in the admin's browser. `PalimpText` is the text primitive
+prose inside a card needs: the same admin-gated editor `p()` renders, importable from a
+`"use client"` module.
+
+```tsx
+// app/VarietyCard.tsx — the card, a client component, written once
+"use client";
+
+import { collectionItemKey, PalimpText } from "@palimp/fe-next";
+
+export const VarietyCard = ({ item, staleBody }: {
+  item: { id: string; name: string; featured?: boolean };
+  staleBody?: string;
+}) => (
+  <div>
+    <h3>{item.name}{item.featured ? " ★" : ""}</h3>
+    <p>
+      <PalimpText
+        messageKey={collectionItemKey("varieties", item.id, "body")}
+        {...(staleBody !== undefined ? { staleValue: staleBody } : {})}
+      />
+    </p>
+  </div>
+);
+```
+
+```tsx
+// app/page.tsx — the server side
+const items = await collection(varieties);
+…
+<PalimpCollectionList collection={varieties} itemComponent={VarietyCard}>
+  {items.map((v) => (
+    <VarietyCard key={v.id} item={v}
+      staleBody={p(collectionItemKey(varieties, v.id, "body"), { asString: true })} />
+  ))}
+</PalimpCollectionList>
+```
+
+The division of labour: **children are the baked fragment** — mapped on the server, so the cards
+can carry anything only the server knows (row-resolved prose as an ordinary string prop,
+`defaultMessage` dictionaries, locale prefixes). **`itemComponent` is the live map** — called
+with `{ item }` and nothing else, so every prop beyond `item` must be optional, and the compiler
+rejects a card that requires more: a card needing a server-supplied prop is a card that would
+render wrongly in the live map.
+
+The wrapper is also the collection's registrar — do **not** add a separate `<PalimpCollections>`
+for a collection it renders (a page that accidentally has both is harmless; first registration
+wins). The live list parses like the build, not like the modal: invalid items are dropped
+silently — the modal already marks them — so the admin's page equals the next Publish. An
+unreadable document falls back to the baked children; an emptied one renders an empty list.
+
+Preview mode composes with no special casing: an admin in preview sees the pending structure as
+plain cards — the first time "how the page will look" is answerable for a structural change
+before a Publish. One divergence to know: a fresh item whose prose was never typed previews as an
+*empty* body, where the published page would render the derived key.
 
 ### Adopting palimp in an app that already has a dictionary
 
@@ -319,22 +392,45 @@ hold a query. So an admin editing a page title sees the drawer count the edit an
 while the `<title>` keeps the old value until the site is rebuilt. Inherent to the static-export
 premise, not fixable here.
 
-**`<PalimpCollections>` is the package's only server component and cannot be rendered inside a
-`"use client"` subtree.** The failure is Next's "async/await is not yet supported in Client
-Components", which does not obviously point back here. It is a server component deliberately —
-the `PalimpFields` shape would serialise `defaultItems`, the whole in-repo seed, into the flight
-payload on top of content already in the HTML. Resolving on the server ships a lean declaration
-plus exactly one copy of the item data: the stored row if there is one, the serialized seed if
-there is not (measured on the example: +698 bytes on `out/index.html` for the converted
-section). It awaits the same read as `palimp()`, so `setBackendAdapter()` must have run even on
-a page that never calls `palimp()` — same rule, same registration module.
+**`<PalimpCollections>` and `<PalimpCollectionList>` are server components and cannot be
+rendered inside a `"use client"` subtree.** The failure is Next's "async/await is not yet
+supported in Client Components", which does not obviously point back here. They are server
+components deliberately — the `PalimpFields` shape would serialise `defaultItems`, the whole
+in-repo seed, into the flight payload on top of content already in the HTML. Resolving on the
+server ships a lean declaration plus exactly one copy of the item data: the stored row if there
+is one, the serialized seed if there is not. Both await the same read as `palimp()`, so
+`setBackendAdapter()` must have run even on a page that never calls `palimp()` — same rule, same
+registration module.
 
-**A structural collection change reaches the page only at the next Publish.** A string edit
-appears immediately because each editor re-reads its key; an added or reordered item is
-server-rendered and has no such mechanism. The sharp version: adding an item *with prose* takes
-**two publish cycles** — add and Save, Publish, the card appears with its derived key as its
-body text, type the body inline, Save, Publish. Live structural rendering is phase 2 of the
-collections plan, and it is a different mechanism, not a missing flag here.
+**Liveness of structural collection changes is opt-in per list.** A collection rendered as a
+plain `collection()` map reaches the page at the next Publish; only a map wrapped in
+`<PalimpCollectionList>` re-reads for the admin. Nothing retrofits. Either way, visitors see a
+change only after Publish — and a new item's **per-slug route** always needs one:
+`generateStaticParams` runs at build, and no client wrapper can mint a route on a static export.
+The item's card is live; its standalone page appears at the next Publish.
+
+**`itemComponent` must be a component exported from a `"use client"` module.** A server
+component or an inline arrow fails Next's serialization with "Functions cannot be passed
+directly to Client Components" — an error that names neither palimp nor the prop.
+
+**A `"use client"` card must not import the schema module.** Importing `app/collections.ts` for
+the sake of `collectionItemKey(varieties, …)` ships the schema — `defaultItems` included, the
+whole in-repo seed — in the visitor's JS. The card passes the bare collection *name*
+(`collectionItemKey("varieties", …)`); the server side, already holding the schema, passes the
+schema.
+
+**A client component referenced in the flight payload ships its chunk eagerly even if nothing
+renders it.** This is why the card renders for visitors rather than being kept server-only with
+the client card reserved for the live map: the measured alternative paid the same eager-JS cost
+*and* a larger payload. The honest cost of a live list is the card's chunk plus one hydrated
+card instance per item — measured on the example: ~1.5 KB of eager JS, and a *smaller*
+`out/index.html`, since a client card's markup leaves the payload while its props enter it.
+
+**Preview renders an untyped fresh prose key as empty, where publish would render the key.**
+`EditComponent`'s preview chain ends `?? ""` and `PalimpText` has nothing to pass for a key with
+no row. Arguably the better render — preview is a lie-detector for layout, and a long raw key is
+a worse stand-in for absent copy than whitespace — but it is a preview/publish divergence, and
+it will be noticed.
 
 **`<PalimpFields>` declarations ship to visitors in the RSC payload.** The component renders `null`
 for a visitor and loads no admin code — verified in a static export — but it is a client component
@@ -375,7 +471,8 @@ render path undoes it.
 
 **`XcoreClientComponent`.** The client component in the render path still carries a previous
 project's name, and `index.ts` also exports `palimp as xcore`. Both are in the public surface,
-so renaming is a breaking change rather than a tidy-up.
+so renaming is a breaking change rather than a tidy-up. `PalimpText` is the same component under
+the name documentation teaches — an index alias, not a rename.
 
 **Peers.** `next ^16`, `react >=18`, `@palimp/core`. React 18 satisfies the declared range, but
 `core` uses React 19 APIs (`use()`, the `<Context value>` shorthand), so 19 is the real floor.
