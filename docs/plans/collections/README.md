@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phase 1 built and verified on Supabase (merged); phase 2 built and verified incl. the credentialed pass on `pr/08-collections-02-live-rendering`, awaiting merge · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phases 1 and 2 built, verified on Supabase and merged (v1.6.0, `09be3cd`); phase 3 planned, awaiting review · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -46,6 +46,13 @@ are the ones that survived reading the source rather than the ones the explorati
 D6–D8 were answered **2026-08-20**, in the phase-2 planning session and before
 [02-live-rendering.md](02-live-rendering.md) was written; two of the three were decided by
 measuring a prototype rather than by argument.
+D9–D14 were answered **2026-08-31**, in the phase-3 planning session and before
+[03-media.md](03-media.md) was written. D9 is the D1 clause — "Sveltia stays the fallback if
+media becomes central" — taken as the gate it was written to be: the plan's §A defines "central"
+and the condition under which the recommendation flips. D10 departs from this file's phase-3
+brief (it stores a URL, not a path), for reasons found in the source rather than the brief. D14
+narrows the brief's "both backends" to Supabase, on the user's word that Firebase Storage will
+not exist before the feature ships.
 
 | # | question | answer (2026-08-19) | why |
 | --- | --- | --- | --- |
@@ -57,14 +64,20 @@ measuring a prototype rather than by argument.
 | D6 | RSC boundary for live rendering (2026-08-20) | **One client card, used on both sides** — the host's item renderer is a client component, passed by module reference and also used to render the baked children | Measured: the dual-render alternative pays +795 B of payload and *still* ships the card chunk eagerly, because a client-module reference in the flight payload pulls its chunk in even unrendered |
 | D7 | Preview mode × live list (2026-08-20) | **The live list stays live in preview**, with zero preview-specific code | Preview means "how the page will look", which after the next Save-and-Publish includes pending structure; `EditComponent`'s existing preview branch handles the prose, so correctness falls out of composition |
 | D8 | Does the wrapper also register the collection? (2026-08-20) | **Yes** — `<PalimpCollectionList>` registers into `collectionsStore`; `<PalimpCollections>` stays for modal-only collections | The wrapper needs the declaration and document anyway, and the measured prototype shipped `staleDocument` twice when the two stayed separate; the store's dedup-by-key makes accidental coexistence harmless |
+| D9 | Does phase 3 cross D1's media gate — build, or fall back to Sveltia? (2026-08-31) | **Build.** "Central" is defined in 03-media.md §A as six signs (derivatives, a library surface, reference-checked deletion, media outside collections, private-until-published, volume); the recommendation flips at two of them, or at derivatives or privacy alone | None is present in the requirement (one art-directed, consent-cleared file per field, dozens, public), each would be structural for palimp and additive for Sveltia, and the seam costs one interface, one context, one widget and a small adapter per backend with zero contract changes; the coexistence path (Sveltia-managed repo files pasted into the widget's URL input) is kept open by D10 |
+| D10 | What does the item store? (2026-08-31) | **The public URL**, not a storage path; the `image` widget is a URL input plus an Upload button | A path needs resolving on the server, in the live map and for visitors — three surfaces and a `setMediaAdapter()` singleton; a URL needs `<img src>` and nothing else, keeps `fe-next` at zero code changes, and lets the same field take a repo path with no adapter mounted (the exploration's v1 workflow as a degraded mode). Cost: relocating a bucket rewrites documents |
+| D11 | Public or signed access? (2026-08-31) | **Public read, authenticated create-only**; no update or delete from the client; signed URLs rejected | A static export bakes the URL for the life of the deploy and a signature expires in hours — not a hardening option but a premise conflict; `inline` rows are already public-read on both backends. Consequence recorded as a quirk: an upload is public on upload, before Save or Publish |
+| D12 | Seam shape and feature detection (2026-08-31) | **The publish seam's shape** — `PalimpMediaAdapter` + nullable `PalimpMediaContext` in `core`, the widget disables Upload with "No media provider" — with the implementations mounted through an optional **`media` prop on each existing backend provider**, not a second provider | Publishing is a different service with its own credentials, so it has its own provider; media lives in the same project, key and session as the rows, so a separate provider would repeat them. The bare context stays the seam for any third-party or git-backed adapter |
+| D13 | Upload timing, paths and orphans (2026-08-31) | **Upload on selection**; paths are `<collection>/<timestamp>-<rand>-<name>`, never overwritten (`upsert: false` plus create-only rules), `Cache-Control: immutable`; nothing deletes; orphans accepted | Deferring to Save needs a non-string draft layer, a media-aware save path and a live card that cannot show the image — three invariants for one class of leftover the landing notes already document (prose rows outlive items). Never-overwritten is what makes a stored URL stable across rebuilds by construction |
+| D14 | Which backends does phase 3 implement? (2026-08-31) | **Supabase only.** The Firebase adapter is designed in 03-media.md §E and deferred; the firebase example mounts no `media` prop and runs the degraded widget | Cloud Storage for Firebase is not provisioned and will not be before the feature is published; the house rule verifies admin behaviour against a real backend or records it unrun, and a whole adapter recorded unrun is a liability, not a deliverable. The seam is backend-agnostic, so the follow-up is new files in `be-firebase` with no `core` change — and the firebase example is the one real page exercising D12's "lose only the upload button" |
 
 ## Phase map
 
 | phase | plan file | status |
 | --- | --- | --- |
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
-| 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built on `pr/08-collections-02-live-rendering`; verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
-| 3 — media seam | `03-media.md` | waiting on phase 1; independent of phase 2 |
+| 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built and merged into `pr/08-collections` (`09be3cd`, v1.6.0); verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
+| 3 — media seam | [03-media.md](03-media.md) — written 2026-08-31 | **planned, awaiting review; not yet built** |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
 
 ### Phase 1 — collections core → `01-core.md`
@@ -126,7 +139,9 @@ setup documentation in the same shape as the table grants; upload limits and wha
 orphaned files when an item is deleted.
 
 **Exit criteria:** upload from the modal → path stored on the item → rendered after rebuild, on
-both backends; setup docs good enough to run without guessing.
+both backends; setup docs good enough to run without guessing. *(Narrowed 2026-08-31: the item
+stores the URL — D10 — and the implementation is Supabase only, the Firebase adapter deferred
+— D14.)*
 
 ### Phase 4 — demand-driven extensions → `04-extensions.md`
 
@@ -136,9 +151,20 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Merge `pr/08-collections-02-live-rendering` into `pr/08-collections`** — the credentialed
-   pass ran 2026-08-21 and passed; the merge is the user's call.
-2. **Then plan phase 3 (media seam)** — independent of phase 2. Unrun items to close when
-   circumstances allow: the Firestore round-trip (needs Firebase credentials), and the
+1. **Review [03-media.md](03-media.md)** — written 2026-08-31, nothing built or committed from
+   it yet. The two things most worth a second opinion are D10 (URL, not path — it departs from
+   the brief above) and §A's flip condition, which is the line this feature promises not to cross.
+2. **Implement phase 3** per that plan, on its own branch off `pr/08-collections`. Lockstep bump
+   1.6.0 → 1.7.0 inside the feature commit; the backend READMEs gain their Storage sections in the
+   shape of the table grants; the first step of verification item 5 is applying those sections to
+   the demo project *as written*, which is the test of "good enough to run without guessing".
+   **Supabase only** (D14): `be-firebase` gets a README quirk and the lockstep bump, nothing
+   else; the firebase example's layout is untouched and dogfoods the degraded widget.
+3. Append the divergence note to `03-media.md` and update the tables above.
+4. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
+   provisioned on the Firebase project — new files in `be-firebase`, its own divergence entry,
+   its own lockstep bump. Not before.
+5. **Phase 4 opens only on demand.** Unrun items from earlier phases to close when circumstances
+   allow: the Firestore round-trip (needs Firebase credentials), and the
    added-item-renders-after-rebuild Publish check (needs a collections branch to be what the
-   deploy workflow builds) — shared by phases 1 and 2.
+   deploy workflow builds) — shared by phases 1 and 2, and now 3.
