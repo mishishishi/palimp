@@ -9,6 +9,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <PalimpSupabaseProvider
       url={process.env.NEXT_PUBLIC_SUPABASE_URL!}
       publishableKey={process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!}
+      media={{ bucket: "palimp" }}
     >
       <PalimpGithubPublishProvider
         owner={process.env.NEXT_PUBLIC_GITHUB_OWNER!}

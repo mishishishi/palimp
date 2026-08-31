@@ -845,3 +845,146 @@ from [host-adoption.md](../host-adoption.md), kept by both previous phases and t
 notes can be trusted.
 
 ---
+
+## Divergence note (2026-08-31, implementation)
+
+Built as specified — §G's file list, §G's "what does not change" list intact — with the following
+departures. Three were found by measuring, three by driving the widget against a real bucket, and
+one by reading an SDK.
+
+1. **The eager-JS delta is +1,336 B, not §E's "a few hundred bytes … expected under 1 KB".**
+   Stub-adapter static export, the phase-1 item 3 procedure, uncompressed: eager JS
+   643,733 → 645,649. Decomposed against the firebase example, which gains the same card and no
+   adapter code, the card's `<img>` branch is +176 B and the **`be-supabase` media shell is
+   ≈ 1,160 B**. §E predicted the shell would be eager and it is; it predicted the size and was
+   low. A third build settled who pays: with the `media` prop **removed** the eager JS is
+   byte-identical (645,649), because `react.tsx` statically imports the provider that builds the
+   adapter. So a Supabase host that never mounts media still ships the shell. Recorded as a
+   be-supabase quirk rather than fixed — a fourth `./media` subpath is the fix the alternatives
+   section already rejects, and the beneficiary would be a host that opted out of a feature.
+2. **Supabase serves `cache-control: public, max-age=31536000`; `immutable` is not expressible.**
+   §D said the upload sends `public, max-age=31536000, immutable`. Reading `storage-js` showed
+   only `max-age=${cacheControl}` being composed, so the first draft of the README said "not
+   `public` and not `immutable`" — and `curl` on the real object then showed `public,` present
+   after all, added above the storage API. Both the README and the source comment now say what
+   the object actually serves. A year is still correct without `immutable`, for §D's reason.
+3. **`FieldsEditor` and `FieldControl` gained a `collectionName` prop.** §B costed the widget as
+   "one arm in each of three switches plus one row in `FieldValue` and one in the validator", and
+   the arms are exactly that — but the control needs the collection's name for `mediaPath`'s
+   folder and for the picker's `list` prefix, and neither component had it. It is threaded
+   unchanged through the recursion, so an image inside a `list` uploads to its collection's
+   folder like a top-level one.
+4. **The upload error renders through a *nested* `Form.Item`.** §C said the message lands "through
+   `Form.Item`'s `help`, the same place validation messages live". The outer item's `help` is
+   computed from the validator's problems in `FieldsEditor`, which the control cannot reach, so
+   `ImageControl` renders its own `Form.Item` with `validateStatus`/`help` around its contents.
+   Same place on screen, same mechanism; a validation problem and a failed upload can now show
+   as two lines, which is right — they are two different facts.
+5. **A rejected upload's message outlived the item it belonged to — fixed by keying the form.**
+   Found by driving: selecting another item kept the message under *that* item's Photo field,
+   because React reconciles the same `ImageControl` instance across a selection change and the
+   error is its state. `CollectionEditor`'s `<Form>` now carries `key={selectedIndex}`, so
+   switching items remounts the controls. Everything they render comes from props, so the only
+   thing this resets is transient control state — the error and the open picker, both of which
+   *should* reset.
+6. **Two bugs in the widget's own gates, both found by exercising them.** `acceptsType` treated
+   `*/*` as the prefix `*/` and therefore rejected everything a wildcard-accepting field was
+   given; it now short-circuits `*` and `*/*`. And `formatBytes` rounded anything under 1 KB to
+   "0 KB", so a `maxBytes` rejection read "is 0 KB; the limit for this field is 0 KB"; it now
+   renders bytes below 1 KB.
+7. **`<Space direction>` is deprecated in antd 6** (`Please use `orientation` instead`), which the
+   dev overlay reported on the first render of the widget. Changed to `orientation`; it was the
+   only `direction` prop in the workspace.
+
+**Small unplanned decisions, recorded:** the media adapter is mounted by rendering
+`SupabaseMediaProvider` conditionally rather than §E's `<PalimpMediaContext value={media ?? null}>`
+— building the adapter is a `useMemo` and a hook cannot be called conditionally, and not rendering
+the context is identical to mounting `null`, which is what the context already defaults to;
+`mediaPath` takes `Pick<File, "name">` rather than a `File`, so it is callable from a fixture;
+sanitising leaves a trailing separator before the extension when the stem ended in a stripped
+character (`(final).JPG` → `-final-.jpg`), which the §D rule as written produces and which nothing
+depends on; `CLAUDE.md` and the root `README.md` each had a "four contracts / three contexts"
+count that this phase makes wrong, so both were corrected — outside the plan's documentation list,
+but leaving them would have left the repo describing itself incorrectly.
+
+**Landing notes.** Verification status, item by item.
+
+**Items 1–4 ran and pass.** Item 1: `check-types` clean, and the new `photo: 3` fixture fails with
+**TS2322** as §C predicted — checked to be live by giving it a valid value, which produces TS2578.
+Item 2: `pnpm build` clean, every `exports` map unchanged. Item 3 (stub-adapter static export,
+final code): supabase visitor `out/index.html` 24,995 → **25,595** and eager JS 643,733 →
+**645,649** with the same stored document on both sides; against a document with no photo at all
+the html figure is 24,869, so an image costs ≈ 726 B of payload end to end. The stored photo URL
+renders as `<img src>` in `out/index.html` **verbatim**. The **firebase** example, which mounts no
+`media` prop: `index.html` 21,275 → **21,337** (+62, the schema's new field row) and eager JS
+636,647 → **636,823** (+176, the card's `<img>` branch) — and **no adapter code at all**, grepped.
+Chunk placement as §E promised: "No media provider" and "Choose existing" appear in the lazy admin
+chunk only, the adapter shell (`31536000`, the public-URL template) in the eager provider chunk,
+and `StorageApiError` / `GoTrueClient` in a lazy one. Item 4: twelve pure fixtures against the
+built `dist` with no backend, all passing — `mediaPath` on spaces, diacritics, uppercase and
+parens; a 200-character stem capped at 64 with `.jpeg` kept; a path made one second later sorting
+after one made earlier; a leading dot not treated as an extension; `url()` on a path with a slash
+and a space, with a trailing-slash base and a custom bucket, no SDK initialised; and the validator
+on `photo: ""` (dropped, "must be a non-empty string"), `photo: 42` (dropped), a valid URL (kept),
+an absent optional (kept, key still absent) and a missing required (dropped).
+
+**Item 5 ran 2026-08-31 against real Supabase credentials**, CDP-driving a signed-in session in
+the dev server, and passes except where noted at the end:
+
+- **The bucket and policies from §E applied to the demo project exactly as written**, from the
+  README section, in one go — no guessing, no step the docs left out. `allowed_mime_types` took
+  the `image/*` wildcard, which §E flagged as unconfirmed.
+- **Degraded mode, with the `media` prop removed:** the Photo field showed its URL input with
+  Upload, Choose existing and Clear disabled and **"No media provider"** on hover (confirmed in a
+  screenshot). A typed `/some/path.jpg` entered the draft, the badge read `Save (1)`, and the live
+  card rendered `<img src="/some/path.jpg">` — the broken image, before any Save. Clearing removed
+  the **key**: all five cards survived with zero validity marks, where a stored `""` would have
+  failed the new validator case and had `LiveCollectionList` drop the card. Confirmed again after
+  a save — the stored document has a `photo` key on exactly one item.
+- **With the prop:** choosing a JPEG made **one** upload POST (200); the object landed at
+  `varieties/20260831T001013-<rand>-gr-s-michel-photo-final-.jpg` — folder per collection,
+  UTC timestamp, random suffix, the filename lowercased and reduced. `curl` **unauthenticated**
+  returned **200**, `content-type: image/jpeg`, `cache-control: public, max-age=31536000`. The
+  field's preview and the **live card showed the image before any Save**; preview mode showed it
+  as a plain card with zero editors.
+- **Save** wrote **one** `setKeys` POST to `/rest/v1/inline?on_conflict=key` whose document
+  carried the URL, the badge went to `Save (0)`, and the row round-trips as a **string**.
+- **Uploading the same file again** produced a second object and a second URL with no error.
+- **The three limit layers each behaved as designed:** a file over the bucket's `file_size_limit`
+  came back 400 with the storage error **"The object exceeded the maximum allowed size"** shown
+  verbatim under the field, previous value intact; a file over a schema `maxBytes` was rejected
+  with **zero storage requests**; a forced non-image was rejected by the widget's own `accept`
+  gate, also with zero requests. To exercise the *bucket's* MIME list as a backstop the schema
+  was temporarily narrowed so the widget would pass a text file — the bucket answered 400,
+  **"mime type text/plain is not supported"**, again shown verbatim.
+- **Choose existing** listed both uploads **newest first** (the timestamp ordering doing its job
+  with no metadata call), including the one no item references; clicking one set the URL and
+  closed the picker.
+- **Upload, then Discard changes:** the draft went and the object stayed, served 200 — the orphan,
+  confirmed and now documented in three READMEs.
+- **Duplicate** gave two cards showing the same file; **deleting the original** left the copy
+  rendering it and the object still served — the sharpest reason nothing deletes.
+- **A full static export against the real table** rendered the uploaded photo in the visitor HTML,
+  five cards, and **zero** `data-palimp-editor` occurrences.
+
+**Not run, and why:**
+
+- **The authenticated `update`/`remove` refusal was only half-tested.** What ran: **anonymous**
+  `DELETE` → 403 "Access denied", and anonymous `PUT`/`POST` to the existing path with a valid
+  image type → 403 **"new row violates row-level security policy"**, with the object still served
+  and byte-identical afterwards. What did **not** run: the same attempt from a *second signed-in
+  session*, which needs the session's access token; handling that token was out of bounds for
+  this session, and the policy set the README ships grants `authenticated` only `insert` and
+  `select`, which is the claim the anonymous half already exercises from below.
+- **The Publish step**, exactly as in phases 1 and 2: the deploy workflow builds `main`, so
+  "the added photo renders after a rebuild" stays unexercisable until a collections branch is what
+  it builds. The dispatch path itself was demonstrated in phase 1.
+- **The firebase example's own admin rendering**, unrun since phase 1 for want of Firebase
+  credentials. Its degraded widget is verified by construction and by the zero-adapter-code grep,
+  and the degraded *behaviour* was verified on Supabase by omitting the prop, which is what §E's
+  last bullet asks for.
+
+**Test data left in the demo project**, as phases 1 and 2 left theirs: three objects in the
+`palimp` bucket under `varieties/` — the one the `gros-michel` item references, and two orphans
+(one from the re-upload, one from the upload-then-Discard). The stored document keeps its five
+items with a photo on `gros-michel`. Nothing was deleted, because nothing can be.

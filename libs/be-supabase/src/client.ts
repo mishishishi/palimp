@@ -1,6 +1,12 @@
 import type { PalimpClientBackendAdapter } from "@palimp/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+// The media adapter is a separate file but the same entry point: it is the
+// same project, the same key and the same browser client, so a fourth subpath
+// for it would be indirection with no beneficiary.
+export { createMediaAdapter } from "./media";
+export type { SupabaseMediaOptions } from "./media";
+
 export const createClientAdapter = (
   url: string,
   key: string,

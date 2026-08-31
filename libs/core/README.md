@@ -12,7 +12,7 @@ writing an adapter of your own.
 
 Three, and the split matters — see [Quirks](#quirks).
 
-- `@palimp/core` — types, adapter interfaces, the three React contexts, and the collections
+- `@palimp/core` — types, adapter interfaces, the four React contexts, and the collections
   module re-exported. Cheap; no UI deps pulled in.
 - `@palimp/core/collections` — the collections module alone: `defineCollection`,
   `collectionKey`, `parseCollectionDocument`, `serializeCollectionDocument` and their types.
@@ -48,7 +48,17 @@ interface PalimpPublishAdapter {
   publish: (token: string) => Promise<PalimpPublishRun>;
   getLatestRun: (token: string) => Promise<PalimpPublishRun | null>;
 }
+
+// media: optional. Upload a file, list a folder, name a public URL
+interface PalimpMediaAdapter {
+  upload: (path: string, file: File) => Promise<PalimpMediaAsset>;
+  list: (prefix: string) => Promise<ReadonlyArray<PalimpMediaAsset>>;
+  url: (path: string) => string;                 // pure and synchronous
+}
 ```
+
+`PalimpMediaAsset` is `{ path, url, size?, contentType? }`. The `image` widget stores the
+**`url`** on the item, not the path — see [Writing a media adapter](#writing-a-media-adapter).
 
 `User` is `{ id, email, name?, publishToken? }`. `publishToken` is what the publish adapter is
 handed — it comes from the signed-in user's profile, not from adapter config, which is why
@@ -64,16 +74,19 @@ import {
   PalimpGeneralContext,        // admin | preview | togglePreview | reset
   PalimpClientBackendContext,  // PalimpClientBackendAdapter
   PalimpPublishContext,        // PalimpPublishAdapter | null
+  PalimpMediaContext,          // PalimpMediaAdapter | null
 } from "@palimp/core";
 ```
 
 The first two are `createContext<T>(null!)` — non-nullable type, null default. They are mandatory,
 so rendering an admin component outside their providers throws rather than degrading.
 
-`PalimpPublishContext` is `createContext<PalimpPublishAdapter | null>(null)`. Publishing is
-optional, so `null` is a real state consumers check: `usePublishButton` reports
+`PalimpPublishContext` and `PalimpMediaContext` are the two nullable ones —
+`createContext<T | null>(null)`. Both capabilities are optional, so `null` is a real state
+consumers check rather than a default that never survives to a read: `usePublishButton` reports
 `available: !!adapter`, `usePublishRun` passes `skipToken`, and the drawer disables Publish with
-"No publish provider".
+"No publish provider"; the `image` widget disables Upload and Choose existing with
+"No media provider" and leaves its URL input working.
 
 `PalimpGeneralContext.admin` is `boolean | undefined`, and all three states are used:
 `undefined` means the session check hasn't run yet, so `LoginPageCore` shows a spinner instead
@@ -112,6 +125,45 @@ that costs.
 [PalimpClientBackendAdapter.ts:10](src/PalimpClientBackendAdapter.ts) on purpose: the Save button
 commits everything at once, and a partial failure should not leave half the drawer committed.
 Use a real batch write (Firestore `writeBatch`, Postgres upsert) rather than a loop.
+
+## Writing a media adapter
+
+Optional and separate from storage, like publishing — but unlike publishing it is not separate
+from the *backend*: media lives in the same project, under the same key and the same signed-in
+session as the rows. So the first-party implementations ride their backend provider's `media`
+prop rather than getting a provider of their own, and anyone else mounts the context directly.
+
+```tsx
+import { PalimpMediaContext, type PalimpMediaAdapter } from "@palimp/core";
+
+const media: PalimpMediaAdapter = {
+  upload: async (path, file) => ({ path, url: publicUrlOf(path) }),
+  list: async (prefix) => [],           // an adapter that cannot enumerate returns []
+  url: (path) => publicUrlOf(path),     // pure: no network, no SDK
+};
+
+// inside your backend provider, outside PalimpProvider
+<PalimpMediaContext value={media}>{children}</PalimpMediaContext>
+```
+
+Three rules the widget and the render path assume:
+
+**Never overwrite.** `upload` is handed a path that already carries a UTC timestamp and a random
+suffix, so collisions do not happen by accident — reject them anyway (`upsert: false`, and a
+backend rule that permits create only). That is what makes a stored URL point at bytes that
+cannot change, which is what makes a static export's baked `<img src>` correct for the life of
+the deploy and a year-long cache header honest.
+
+**Public read.** A static export bakes the URL into HTML for months; a signed URL expires in
+hours, so signed access is not a hardening option here but a conflict with the premise. Palimp
+content is site content — the message rows are public-read on both backends too.
+
+**`url()` is synchronous and pure.** No network, no SDK initialised. Both first-party backends
+have a deterministic public-URL format, which is what lets `upload` and `list` return URLs
+without extra round trips and lets a host compute one on the server for an `og:image`.
+
+Nothing in the contract deletes. That is not an omission: a safe delete needs a reference check
+across items, collections and prose rows, and palimp indexes none of the last. See the quirks.
 
 ## The admin UI
 
@@ -180,7 +232,29 @@ drops invalid items with a warning and never throws on data.
 Unlike the Fields modal, nothing in here is an `EditComponent`: the controls are ordinary antd
 inputs, nothing carries `[data-palimp-editor]`, and the interaction guard never sees their
 events — **Escape closes this modal normally**, where it does not close the Fields modal with
-the caret in a field.
+the caret in a field. The `image` widget's native file dialog opens for the same reason.
+
+#### The `image` widget
+
+The eighth widget, and the only one whose value the owner cannot type from memory. It is a
+preview, a URL input, **Upload**, **Choose existing** and **Clear**, and what it stores is the
+file's **public URL** — so a card renders `<img src={item.photo}>` and no palimp code is in the
+render path, on the server or in the browser.
+
+The URL input is the whole widget when no `PalimpMediaAdapter` is mounted, and that is a
+supported mode rather than a broken one: a repo path (`/images/hero.jpg`) or an externally
+managed file typed in by hand is a working value. Upload and Choose existing are what an adapter
+adds; with none they render disabled saying "No media provider", the Publish button's idiom.
+
+Upload happens **on selection**, not at Save: the draft stays a string, the live card can show
+the image immediately, and the save path stays a save path. What that costs is in the quirks.
+Choose existing expands an inline grid of `adapter.list(<collection>)`, newest first — a dozen
+thumbnails of that collection's folder, not a media library, and the only view palimp offers of
+what the bucket holds. Because `FieldControl` recurses, an image inside a `list` — a gallery —
+works the day the top-level one does, with no gallery-specific code.
+
+Alt text is not part of the widget: an image is a file, and its description is a sibling
+`string` field the developer declares.
 
 ### `LiveCollectionList`
 
@@ -275,6 +349,35 @@ same failure one level finer; recorded, not solved.
 about collections would mean teaching `editsStore` about its values, and not knowing them is why
 it has survived every feature unchanged. The compensation is local: a dirty dot on the
 collection's tab and a dirty mark per changed item.
+
+**An uploaded file is public the moment it is chosen — before Save, before Publish.** The widget
+uploads on selection, so between choosing a file and publishing the page there is a window in
+which the bytes are reachable by anyone holding the URL while the item referencing them is still
+a draft. Unlisted is not private. The alternative — hold the file and upload at Save — needs a
+draft layer that is not a string, a save path that knows about media, and a live card that cannot
+show the image it is about to get.
+
+**Nothing deletes media, and orphans arrive four ways.** Deleting an item whose photo was
+uploaded; **Discard changes** after an upload; re-uploading a file (a new timestamp, a new
+object); and Duplicate, which copies the URL verbatim so two items share one file — which is the
+sharpest reason there is no delete-on-item-delete. Orphaned objects are the same category as the
+orphaned prose rows both earlier collections phases documented: visible, cleaned up by hand in
+the backend console. A "delete this file" affordance would need a reference check across items,
+across collections and across prose rows, and palimp has no index for the last; offering it
+without the check is offering a broken-image generator.
+
+**`image` clears to absent, never `""`.** It follows the `number` rule rather than the `string`
+rule, whether or not the field is required, because `<img src="">` re-requests the page itself —
+an empty URL is a broken image, not a blank field. The validator agrees: a present value must be
+a non-empty string, and a fresh item's required image starts **absent** with the validity mark
+saying so.
+
+**No processing.** No resizing, no variants, no format conversion, no `next/image` loader. A 9 MB
+photo is served to every visitor at 9 MB. `maxBytes` on the field rejects it early and the
+bucket's own limit is the backstop, but neither shrinks anything.
+
+**`accept="image/*"` admits HEIC** on browsers that report it as an image, and HEIC renders only
+in Safari. A host that cares sets `accept` to explicit types.
 
 **An optional boolean cannot be returned to absent through the modal.** A `Switch` has no empty
 state, so once touched it is `true` or `false` forever. A field whose absence is meaningful

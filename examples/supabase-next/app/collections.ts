@@ -16,6 +16,10 @@ export const varieties = defineCollection({
       label: "Id (slug)",
     },
     { name: "name", widget: "string", required: true, label: "Name" },
+    // Optional, and `defaultItems` seeds none: the seed has to work against
+    // an empty database with no bucket, which is the whole point of having
+    // one. A card renders without an image until the owner adds one.
+    { name: "photo", widget: "image", label: "Photo" },
     { name: "featured", widget: "boolean", label: "Featured" },
   ],
   defaultItems: [

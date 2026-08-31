@@ -37,13 +37,13 @@ flowchart TB
     end
 
     subgraph core["@palimp/core — contracts + admin UI"]
-        contracts["PalimpServerBackendAdapter<br/>PalimpClientBackendAdapter<br/>PalimpPublishAdapter"]
-        ctx["PalimpGeneralContext<br/>PalimpClientBackendContext<br/>PalimpPublishContext"]
+        contracts["PalimpServerBackendAdapter<br/>PalimpClientBackendAdapter<br/>PalimpPublishAdapter<br/>PalimpMediaAdapter"]
+        ctx["PalimpGeneralContext<br/>PalimpClientBackendContext<br/>PalimpPublishContext<br/>PalimpMediaContext"]
         admin["EditComponent · Devtools · LoginPageCore<br/>PalimpFields · editsStore · fieldsStore"]
     end
 
     subgraph impls["Adapters"]
-        sb["@palimp/be-supabase"]
+        sb["@palimp/be-supabase<br/>client · server · media"]
         fb["@palimp/be-firebase"]
         gh["@palimp/publish-github"]
     end
@@ -61,8 +61,9 @@ play — it mounts a provider, and everything above it is written against the in
 
 ## The contracts
 
-Four seams. Three are adapter interfaces the host implements or picks; the fourth is the React
-context trio that carries them down the tree.
+Five seams. Four are adapter interfaces the host implements or picks; the fifth is the React
+context quartet that carries them down the tree. Two of the four are optional —
+`PalimpPublishAdapter` and `PalimpMediaAdapter` — and their contexts are the nullable ones.
 
 ### `PalimpServerBackendAdapter` — bulk load for the build
 
@@ -170,15 +171,56 @@ Note that `publish` and `getLatestRun` each take the token as an argument instea
 it. The token comes from the signed-in user's profile, not from adapter config, so it isn't known
 when the adapter is constructed.
 
-### The context trio
+### `PalimpMediaAdapter` — optional file storage for the `image` widget
+
+[libs/core/src/PalimpMediaAdapter.ts](../libs/core/src/PalimpMediaAdapter.ts)
+
+```ts
+export interface PalimpMediaAdapter {
+  upload: (path: string, file: File) => Promise<PalimpMediaAsset>;
+  list: (prefix: string) => Promise<ReadonlyArray<PalimpMediaAsset>>;
+  url: (path: string) => string;
+}
+
+export interface PalimpMediaAsset {
+  path: string;
+  url: string;
+  size?: number;
+  contentType?: string;
+}
+```
+
+The newest seam and the one that is *not* orthogonal to the backend. Publishing is a different
+service with its own credentials, so it gets its own package and its own provider; media lives in
+the same project, under the same key and the same signed-in session as the message rows, so a
+backend package exports a `createMediaAdapter` beside its client adapter and mounts it through
+one optional `media` prop on the provider it already has. The bare context is still the seam —
+anyone whose media lives elsewhere mounts `PalimpMediaContext` directly.
+
+Three shapes worth the note. There is **no token argument**, unlike `publish(token)`: media
+authenticates with the backend SDK's own session, which the adapter already holds. **`url()` is
+synchronous and pure** — both first-party backends have a deterministic public-URL format, so no
+SDK is initialised to produce a string, which is what lets a host compute one on the server for an
+`og:image`. And **nothing deletes**: a safe delete needs a reference check across items,
+collections and prose rows, and palimp indexes none of the last.
+
+What the `image` widget stores on the item is the asset's `url`, not its `path`. That is the
+choice that keeps `fe-next` at zero code: a card renders `<img src={item.photo}>` and no palimp
+code is in the render path on either side. It also means a hand-typed repo path is a working
+value with no adapter mounted, and that relocating a bucket rewrites documents. Only
+`@palimp/be-supabase` implements it today. Design record:
+[plans/collections/03-media.md](plans/collections/03-media.md).
+
+### The context quartet
 
 | context | carries | provided by |
 | --- | --- | --- |
 | `PalimpClientBackendContext` | the client backend adapter | `PalimpSupabaseProvider` / `PalimpFirebaseProvider` |
 | `PalimpPublishContext` | the publish adapter | `PalimpGithubPublishProvider` |
+| `PalimpMediaContext` | the media adapter, or `null` | `PalimpSupabaseProvider`'s `media` prop |
 | `PalimpGeneralContext` | UI state: `admin`, `preview`, `togglePreview`, `reset` | `PalimpProvider` |
 
-The first two carry adapters and are provided by the backend packages. The third carries no
+The first three carry adapters and are provided by the backend packages. The last carries no
 adapter at all — it is the session/UI state that `core`'s admin components read:
 
 ```ts
@@ -201,11 +243,13 @@ The general and backend contexts are created with `createContext<T>(null!)` — 
 null default. Rendering an admin component outside its provider is a crash, not a degraded mode,
 which is what you want for a context that is mandatory.
 
-`PalimpPublishContext` is the exception: `createContext<PalimpPublishAdapter | null>(null)`.
-Publishing is optional, so `null` is a state the Devtools has to handle rather than a default that
-never survives to a read. Consumers check it — `usePublishButton` reports `available: !!adapter`
-and `usePublishRun` passes `skipToken` — and the drawer disables the button with
-"No publish provider", the same way a missing token disables it.
+`PalimpPublishContext` and `PalimpMediaContext` are the exceptions:
+`createContext<T | null>(null)`. Both capabilities are optional, so `null` is a state the admin
+UI has to handle rather than a default that never survives to a read. Consumers check it —
+`usePublishButton` reports `available: !!adapter` and `usePublishRun` passes `skipToken` — and
+the surface says which is missing: the drawer disables Publish with "No publish provider", and
+the `image` widget disables Upload and Choose existing with "No media provider" while leaving
+its URL input live.
 
 ## Render, edit, save
 
@@ -292,6 +336,13 @@ Points worth knowing:
   prose editors are too). Design records:
   [plans/collections/01-core.md](plans/collections/01-core.md),
   [plans/collections/02-live-rendering.md](plans/collections/02-live-rendering.md).
+  The eighth widget, `image`, is the one that reaches outside the database: it uploads through
+  an optional `PalimpMediaAdapter` on selection and stores the file's **public URL** in the
+  document, so the value stays a string, the live card shows the picture before any Save, and
+  rendering it is `<img src>` with no palimp code in the path. With no adapter mounted the
+  widget keeps its URL input and disables the upload, which is what makes a repo path or an
+  externally managed file a working value
+  ([plans/collections/03-media.md](plans/collections/03-media.md)).
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved
   edits. It shows how the page will look, not how it currently is.
 - **A window-capture guard keeps a nested editor inert.** An editor can land inside an `<a>`, a
@@ -428,6 +479,15 @@ The bet has been re-tested twice more, with an honest result each time:
   new types and components came with it. The interface absorbed the two GitHub quirks, but the
   capability itself was genuinely new, so the contract moved. Adapters isolate *implementations*,
   not *features*.
+- **Media was the first feature to add files to a backend package, and the bet still held.** The
+  *contract* went in as a new seam rather than a method on storage — `PalimpMediaAdapter` beside
+  `PalimpPublishAdapter`, feature-detected through a nullable context — but the *implementation*
+  landed in `libs/be-supabase/` (`media.ts`, `MediaProvider.tsx`), because unlike publishing the
+  capability is not orthogonal to the backend's project: it is the same project, the same key and
+  the same session. So the claim needs one word added rather than retracting. Adding a backend
+  touches zero files in `core`; adding a *media* backend touches zero files in `core` too, and one
+  optional prop in its own provider. What it does cost is a fourth thing the host wires — and, on
+  Supabase, roughly 1.2 KB of eager adapter shell for visitors of a site that never mounts it.
 
 The cost is visible in the wiring. A host app mounts four nested providers in a fixed order —
 backend, publish, `PalimpProvider`, page — plus a module-level `setBackendAdapter()` call for the
@@ -453,6 +513,13 @@ Worth being explicit, because two of these look alarming and only one is:
 - **Server adapters bypass authorization on purpose.** Supabase's secret key skips RLS; Firebase's
   service account skips security rules. They run at build time, not in response to user input, so
   there is no request to authorize.
+- **An upload is public the moment it is chosen.** The `image` widget uploads on selection into
+  a public bucket, so a file is reachable by anyone holding its URL before the item referencing
+  it is saved and long before the page is published. Unlisted (the paths carry a random suffix)
+  is not private. This is a premise, not an oversight: a static export bakes URLs into HTML for
+  the life of a deploy, and a signed URL expires in hours. The mirrored rule is that a client may
+  only *add* — the suggested policies grant insert and select and deliberately no update or
+  delete, so a session cannot alter or remove bytes a published page already points at.
 - **Client writes are only as safe as your rules.** `setKeys` runs in the browser under the user's
   own credentials. RLS policies (Supabase) or security rules (Firebase) are the only thing
   standing between a signed-in user and every message row. Both backend READMEs carry a starting
@@ -476,7 +543,7 @@ Documented, not fixed. Each is a real behaviour of the code as it stands.
 | --- | --- |
 | [libs/core/src/](../libs/core/src/) | contracts, contexts, and the admin UI behind `./admin` |
 | [libs/fe-next/src/](../libs/fe-next/src/) | `palimp()`, `setBackendAdapter()`, `PalimpProvider`, `LoginPage` |
-| [libs/be-supabase/src/](../libs/be-supabase/src/) | Supabase Auth + PostgREST |
+| [libs/be-supabase/src/](../libs/be-supabase/src/) | Supabase Auth + PostgREST + Storage (media) |
 | [libs/be-firebase/src/](../libs/be-firebase/src/) | Firebase Auth + Firestore |
 | [libs/publish-github/src/](../libs/publish-github/src/) | `workflow_dispatch` + run polling |
 | [examples/](../examples/) | one wiring per backend, both static-exported by CI |

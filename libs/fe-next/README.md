@@ -54,7 +54,7 @@ Backend outside, publish next, `PalimpProvider` innermost — it reads
 ```tsx
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <PalimpSupabaseProvider url={…} publishableKey={…}>
+    <PalimpSupabaseProvider url={…} publishableKey={…} media={{ bucket: "palimp" }}>
       <PalimpGithubPublishProvider owner={…} repo={…} workflow={…}>
         <PalimpProvider>
           <html lang="en"><body>{children}</body></html>
@@ -68,6 +68,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 `PalimpGithubPublishProvider` is optional — leave it out and there is no Publish capability. The
 drawer says so: the Publish button is disabled and reads "No publish provider", the same way it
 reads "Missing publish token" when the signed-in user has no token.
+
+The backend provider's `media` prop is optional in the same way — leave it out and the image
+widget's upload is disabled; the widget says so. It is a prop rather than a fourth provider
+because media lives in the same project, key and session as the rows, and the bucket it names
+has to exist first (see the backend package's README). It is implemented for Supabase today;
+`PalimpFirebaseProvider` takes no `media` prop yet.
 
 ### 3. Wrap strings in a server component
 
@@ -209,13 +215,14 @@ export const varieties = defineCollection({
     { name: "id", widget: "string", required: true, pattern: "^[a-z0-9-]+$", label: "Id (slug)" },
     { name: "name", widget: "string", required: true, label: "Name" },
     { name: "featured", widget: "boolean", label: "Featured" },
+    { name: "photo", widget: "image", label: "Photo" },
   ],
   defaultItems: [{ id: "gros-michel", name: "Gros Michel", featured: true }],
 });
 ```
 
-Seven widgets (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`) with
-`required` / `pattern` / `min` / `max`. The item type is inferred — `defineCollection`'s `const`
+Eight widgets (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`, `image`)
+with `required` / `pattern` / `min` / `max`. The item type is inferred — `defineCollection`'s `const`
 type parameter means `options: ["a", "b"]` narrows to `"a" | "b"` with no `as const` — and
 `defaultItems` is checked against it, so a bad seed fails `check-types`, not the build. An
 optional field's absence is meaningful and preserved: under `exactOptionalPropertyTypes` an
@@ -228,6 +235,7 @@ const items = await collection(varieties);   // ReadonlyArray<{ id: string; name
 …
 {items.map((v) => (
   <div key={v.id}>
+    {v.photo ? <img src={v.photo} alt={v.name} /> : null}
     <h3>{v.name}</h3>
     <p>{p(`varieties.${v.id}.body`)}</p>      {/* prose stays a flat palimp key */}
   </div>
@@ -241,6 +249,14 @@ const items = await collection(varieties);   // ReadonlyArray<{ id: string; name
 Invalid items are dropped with a `console.warn` carrying the greppable
 `palimp: collection "<name>"` prefix; the build never throws on data, and `defaultItems` is the
 fallback only when the document is missing or unreadable — never when the owner emptied it.
+
+An `image` field stores the file's **public URL**, so rendering one is `<img src>` and nothing
+else — no resolution step on the server, in the live map or for a visitor, and no palimp code in
+that render path at all. A plain `<img>`, not `next/image`: on a static export `next/image`
+needs `unoptimized` or a custom loader and buys nothing for a URL the build cannot process. The
+owner produces the URL by uploading from the collections modal when the backend provider was
+given a media adapter — and by typing it when it was not, which is what keeps a repo path a
+working value.
 
 **Item prose stays flat keys**, derived from the item's id (`varieties.<id>.body`, locale prefix
 in front where the host has one). `collectionItemKey(collection, id, suffix)` computes the key —
@@ -362,6 +378,17 @@ It also owns `preview` (the toggle that renders edits as text) and `reset()`, wh
 back to `undefined` and thereby re-arms the session check. Login and logout both call it.
 
 ## Quirks
+
+**A photo is baked like every other value.** An `image` URL reaches the visitor's HTML at build
+time, so a photo used in `generateMetadata` (`og:image`) behaves exactly like an `asString`
+key: it changes on Publish, not on Save. The URL also ships in the flight payload once per item
+that has one — roughly 100–150 bytes each, and unlike the schema declaration it grows with the
+content.
+
+**`image` needs no code in the render path, and that is the whole design.** The field stores a
+URL rather than a storage path precisely so that neither `palimp()`, `collection()`,
+`<PalimpCollectionList>` nor a visitor's browser has to resolve anything. The corollary: moving
+a bucket rewrites documents, because the URLs are in them.
 
 **`setBackendAdapter` is a module-level singleton.** A server component can't read React context,
 so the server adapter is stashed in a module variable that `palimp()` reads. Consequences:

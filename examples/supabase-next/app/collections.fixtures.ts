@@ -116,3 +116,20 @@ export const case8 = PalimpCollectionList({
   itemComponent: wrongItemCard,
   children: null,
 });
+
+// --- Phase 3: the image widget, docs/plans/collections/03-media.md §C.
+
+// 9 — an `image` field is a string in the item type (it stores the file's
+// public URL), so a numeric seed fails like any other wrong type (TS2322).
+export const case9 = defineCollection({
+  name: "fixture-image",
+  idField: "slug",
+  fields: [
+    { name: "slug", widget: "string", required: true },
+    { name: "photo", widget: "image" },
+  ],
+  defaultItems: [
+    // @ts-expect-error — `number` is not assignable to `string`
+    { slug: "a", photo: 3 },
+  ],
+});

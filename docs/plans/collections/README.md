@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phases 1 and 2 built, verified on Supabase and merged (v1.6.0, `09be3cd`); phase 3 planned, awaiting review · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phases 1–3 built and verified on Supabase; 1 and 2 merged (v1.6.0, `09be3cd`), phase 3 on `pr/08-collections-03-media` (v1.7.0), unmerged · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -77,7 +77,7 @@ not exist before the feature ships.
 | --- | --- | --- |
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
 | 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built and merged into `pr/08-collections` (`09be3cd`, v1.6.0); verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
-| 3 — media seam | [03-media.md](03-media.md) — written 2026-08-31 | **planned, awaiting review; not yet built** |
+| 3 — media seam | [03-media.md](03-media.md) — written 2026-08-31, divergence note appended | **built on `pr/08-collections-03-media` (v1.7.0), unmerged; verified incl. the credentialed pass on Supabase (2026-08-31) — the Firebase adapter deferred by D14, the authenticated update/delete refusal half-tested, Publish still unrun** |
 | 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
 
 ### Phase 1 — collections core → `01-core.md`
@@ -151,20 +151,21 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Review [03-media.md](03-media.md)** — written 2026-08-31, nothing built or committed from
-   it yet. The two things most worth a second opinion are D10 (URL, not path — it departs from
-   the brief above) and §A's flip condition, which is the line this feature promises not to cross.
-2. **Implement phase 3** per that plan, on its own branch off `pr/08-collections`. Lockstep bump
-   1.6.0 → 1.7.0 inside the feature commit; the backend READMEs gain their Storage sections in the
-   shape of the table grants; the first step of verification item 5 is applying those sections to
-   the demo project *as written*, which is the test of "good enough to run without guessing".
-   **Supabase only** (D14): `be-firebase` gets a README quirk and the lockstep bump, nothing
-   else; the firebase example's layout is untouched and dogfoods the degraded widget.
-3. Append the divergence note to `03-media.md` and update the tables above.
-4. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
-   provisioned on the Firebase project — new files in `be-firebase`, its own divergence entry,
-   its own lockstep bump. Not before.
-5. **Phase 4 opens only on demand.** Unrun items from earlier phases to close when circumstances
-   allow: the Firestore round-trip (needs Firebase credentials), and the
+1. **Review and merge `pr/08-collections-03-media` into `pr/08-collections`.** Phase 3 is built
+   and verified (v1.7.0, one feature commit); the merge is deliberately not automatic. Worth a
+   look on the way in: the §E eager-JS estimate was low — the `be-supabase` media shell is
+   ≈ 1,160 B and ships whether or not a host mounts the `media` prop (divergence note 1), which
+   is now a quirk rather than a fix; and the two gate bugs the credentialed pass caught (`*/*`
+   and sub-kilobyte sizes) are the argument for driving a widget rather than typechecking it.
+2. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
+   provisioned on the Firebase project — new files in `be-firebase`, the `## Cloud Storage`
+   README section replacing the placeholder quirk, its own divergence entry, its own lockstep
+   bump. Not before. Note that §E's Firebase design carries two facts to re-check against the
+   console rather than trust: the default bucket name, and the plan requirement for projects
+   created after October 2024.
+3. **Phase 4 opens only on demand.** Unrun items to close when circumstances allow: the Firestore
+   round-trip and the firebase example's admin rendering (both need Firebase credentials); the
    added-item-renders-after-rebuild Publish check (needs a collections branch to be what the
-   deploy workflow builds) — shared by phases 1 and 2, and now 3.
+   deploy workflow builds), shared by all three phases; and phase 3's authenticated
+   `update`/`remove` refusal, which was verified anonymously but not from a second signed-in
+   session.

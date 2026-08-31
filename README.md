@@ -40,7 +40,7 @@ Full walkthrough with diagrams: **[docs/architecture.md](docs/architecture.md)**
 
 | package | what it does |
 | --- | --- |
-| [`@palimp/core`](libs/core/README.md) | The four contracts, the three contexts, and the admin UI (`EditComponent`, Devtools drawer, login form, edit buffer). Backend- and framework-agnostic. |
+| [`@palimp/core`](libs/core/README.md) | The five seams — four adapter contracts and the context quartet — and the admin UI (`EditComponent`, Devtools drawer, login form, edit buffer). Backend- and framework-agnostic. |
 | [`@palimp/fe-next`](libs/fe-next/README.md) | Next.js App Router binding: `palimp()` for server components, `setBackendAdapter()`, `PalimpProvider`, `LoginPage`. |
 | [`@palimp/be-supabase`](libs/be-supabase/README.md) | Supabase Auth + Postgres. Includes the `inline` / `profiles` schema and RLS policies. |
 | [`@palimp/be-firebase`](libs/be-firebase/README.md) | Firebase Auth + Firestore. Same shapes, different SDK. |

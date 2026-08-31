@@ -12,12 +12,21 @@ import { collectionItemKey, PalimpText } from "@palimp/fe-next";
 // schema module here would ship it — defaultItems included — in the visitor's
 // JS. The server side, already holding the schema, passes the schema itself.
 interface Props {
-  item: { id: string; name: string; featured?: boolean };
+  item: { id: string; name: string; featured?: boolean; photo?: string };
   staleBody?: string;
 }
 
 export const VarietyCard = ({ item, staleBody }: Props) => (
   <div style={styles.card}>
+    {/*
+      A plain <img>, not next/image: on a static export next/image needs
+      `unoptimized` or a custom loader and buys nothing for a URL the build
+      cannot process. The value is the file's public URL, so nothing resolves
+      it — palimp is not in this render path at all.
+    */}
+    {item.photo ? (
+      <img src={item.photo} alt={item.name} style={styles.cardImage} />
+    ) : null}
     <h3 style={styles.cardTitle}>
       {item.name}
       {item.featured ? " ★" : ""}
@@ -37,6 +46,14 @@ const styles = {
     border: "1px solid #ecdf8c",
     borderRadius: "10px",
     padding: "1.25rem 1.25rem 1.5rem",
+  },
+  cardImage: {
+    display: "block",
+    width: "100%",
+    aspectRatio: "4 / 3",
+    objectFit: "cover" as const,
+    borderRadius: "6px",
+    marginBottom: "0.75rem",
   },
   cardTitle: {
     margin: "0 0 0.5rem",

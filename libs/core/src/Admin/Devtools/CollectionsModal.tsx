@@ -31,6 +31,7 @@ import {
 } from "../collectionsStore.ts";
 import { editQueryKey, editsStore, useEdit } from "../editsStore.ts";
 import { queryClient } from "../queryClient.ts";
+import { ImageControl } from "./ImageControl.tsx";
 
 interface Props {
   open: boolean;
@@ -360,11 +361,16 @@ const CollectionEditor = ({
               description="Delete it from the list, or fix the stored document."
             />
           ) : (
-            <Form layout="vertical">
+            // Keyed by selection so switching items remounts the controls.
+            // Everything they show comes from props, so the only thing this
+            // resets is transient control state — and one item's failed-upload
+            // message must not sit under the next item's Photo field.
+            <Form layout="vertical" key={selectedIndex}>
               <FieldsEditor
                 fields={declaration.fields}
                 value={selectedItem}
                 prefix=""
+                collectionName={declaration.name}
                 problems={selectedProblems}
                 onChange={(next) => {
                   const nextItems = [...workingItems];
@@ -384,12 +390,19 @@ const FieldsEditor = ({
   fields,
   value,
   prefix,
+  collectionName,
   problems,
   onChange,
 }: {
   fields: ReadonlyArray<CollectionField>;
   value: Record<string, unknown>;
   prefix: string;
+  /**
+   * Threaded down unchanged through every level of the recursion: it is the
+   * folder uploads land in, and an image nested in a `list` belongs to the
+   * same collection as one at the top.
+   */
+  collectionName: string;
   problems: ReadonlyArray<CollectionItemProblem>;
   onChange: (next: Record<string, unknown>) => void;
 }) => (
@@ -425,6 +438,7 @@ const FieldsEditor = ({
             field={field}
             value={value[field.name]}
             path={path}
+            collectionName={collectionName}
             problems={problems}
             onChange={set}
           />
@@ -438,12 +452,14 @@ const FieldControl = ({
   field,
   value,
   path,
+  collectionName,
   problems,
   onChange,
 }: {
   field: CollectionField;
   value: unknown;
   path: string;
+  collectionName: string;
   problems: ReadonlyArray<CollectionItemProblem>;
   // `undefined` means "remove the key".
   onChange: (next: unknown) => void;
@@ -501,6 +517,15 @@ const FieldControl = ({
           onChange={(v) => onChange(v)}
         />
       );
+    case "image":
+      return (
+        <ImageControl
+          field={field}
+          value={value}
+          collectionName={collectionName}
+          onChange={onChange}
+        />
+      );
     case "object": {
       const child = isPlainObject(value) ? value : {};
       return (
@@ -509,6 +534,7 @@ const FieldControl = ({
             fields={field.fields}
             value={child}
             prefix={path}
+            collectionName={collectionName}
             problems={problems}
             onChange={onChange}
           />
@@ -583,6 +609,7 @@ const FieldControl = ({
                   fields={field.fields}
                   value={isPlainObject(entry) ? entry : {}}
                   prefix={entryPath}
+                  collectionName={collectionName}
                   problems={problems}
                   onChange={(next) => {
                     const copy = [...entries];
@@ -629,6 +656,10 @@ const newItem = (
         break;
       case "number":
       case "select":
+      // `image` sides with these, not with `string`: a required image starts
+      // absent and the validity mark says so. Seeding "" would be a broken
+      // image, which is worse than a missing one.
+      case "image":
         if (field.default !== undefined) item[field.name] = field.default;
         break;
       case "boolean":

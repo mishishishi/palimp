@@ -7,10 +7,11 @@ implements the identical shapes against Firestore.
 
 ## Entry points
 
-- `@palimp/be-supabase/client` — `createClientAdapter(url, publishableKey)`
+- `@palimp/be-supabase/client` — `createClientAdapter(url, publishableKey)` and
+  `createMediaAdapter(url, publishableKey, { bucket })`
 - `@palimp/be-supabase/server` — `createServerAdapter(url, secretKey)` (server-side only — the
   secret key bypasses RLS)
-- `@palimp/be-supabase/react` — `<PalimpSupabaseProvider url publishableKey>`
+- `@palimp/be-supabase/react` — `<PalimpSupabaseProvider url publishableKey media?>`
 
 ## Usage
 
@@ -30,6 +31,7 @@ setBackendAdapter(
 <PalimpSupabaseProvider
   url={process.env.NEXT_PUBLIC_SUPABASE_URL!}
   publishableKey={process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!}
+  media={{ bucket: "palimp" }}
 >
   {children}
 </PalimpSupabaseProvider>
@@ -37,6 +39,12 @@ setBackendAdapter(
 
 Two different keys, and the difference is the whole security model: the **publishable** key goes
 to the browser and is subject to RLS; the **secret** key stays on the server and isn't.
+
+`media` is optional and mounts a `PalimpMediaAdapter` beside the backend one, on the same
+project, the same key and the same signed-in session — which is why it is a prop here rather than
+a second provider. Leave it out and the collections modal's `image` widget keeps its URL input
+but renders Upload and Choose existing disabled, with "No media provider" on hover. Set it up
+first: see [Storage bucket](#storage-bucket).
 
 ## Postgres schema
 
@@ -122,6 +130,43 @@ Note what the `inline` policies do *not* do: any authenticated user can write an
 Supabase project has non-admin users, scope those policies to an admin role or an allowlist,
 because Palimp has no notion of authorization beyond "is signed in".
 
+## Storage bucket
+
+> Same status as the schema above: reconstructed from [src/media.ts](src/media.ts), not a
+> migration file. The adapter assumes the bucket and policies exist; it creates nothing.
+
+Palimp's media seam stores one file per `image` field and puts its **public URL** on the item.
+Objects live at `<collection>/<yyyymmddThhmmss>-<random>-<filename>` — one folder per collection,
+the timestamp making the path unique so nothing is ever overwritten. Design record:
+[docs/plans/collections/03-media.md](../../docs/plans/collections/03-media.md).
+
+```sql
+-- One public bucket. Reads go through /object/public/ and need no policy at all; the two limits
+-- are backstops for the widget's own `maxBytes` / `accept`, which a bucket cannot see.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('palimp', 'palimp', true, 10485760, array['image/*']);
+
+-- Signed-in users may add objects. There is deliberately no update and no delete policy: a
+-- session can add files but never alter or remove one a published page already references.
+create policy "palimp media insert (auth)" on storage.objects
+  for insert to authenticated with check (bucket_id = 'palimp');
+
+-- The widget's "Choose existing" picker calls list(), which goes through the storage API and
+-- does need select. Public *reads* of the bytes do not.
+create policy "palimp media list (auth)" on storage.objects
+  for select to authenticated using (bucket_id = 'palimp');
+```
+
+Then mount it: `media={{ bucket: "palimp" }}` on `PalimpSupabaseProvider` (the bucket name
+defaults to `"palimp"`, so `media={{}}` is equivalent).
+
+The same caveat the table policies carry applies here, one step sharper: **any authenticated user
+can upload**. Palimp has no notion of authorization beyond "is signed in", so if the project has
+non-admin users, scope the insert policy to an admin role or an allowlist.
+
+What the adapter sends: `upsert: false`, `contentType` from the file, and
+`cacheControl: "31536000"`.
+
 ## Session detection
 
 `hasSession()` must be synchronous ([why](../core/README.md#writing-an-adapter)), so it does no
@@ -163,3 +208,46 @@ back as `Unlucky: <status> <statusText>`.
 
 **Only email/password login.** `LoginValue` in `core` has one member. OAuth would be a `core`
 change first, then an adapter change.
+
+**An upload is public the moment it is chosen — before Save, before Publish.** The widget uploads
+on selection, so the file is in a public bucket and reachable by anyone with the URL while the
+item that references it is still a draft. Unlisted (the path carries a random suffix) is not
+private. For consent-gated photography this is a rule to know rather than a surprise to find: the
+modal is the last step, not a holding area. Signed URLs are not the fix — a static export bakes
+the URL for the life of the deploy and a signature expires in hours.
+
+**Nothing deletes objects, and orphans are expected.** Deleting an item, discarding a draft after
+an upload, re-uploading the same file, and Duplicate (two items sharing one file) all leave
+objects nothing references. Palimp has no delete primitive on any contract and no reference
+index, and the policies above forbid a client delete outright, so cleanup is by hand in the
+Storage console. The widget's picker lists every object in the collection's folder, orphans
+included, and the timestamps in the names say which are stale.
+
+**`cacheControl` is seconds, and `immutable` cannot be sent.** The adapter passes
+`cacheControl: "31536000"` and the served object comes back as
+`cache-control: public, max-age=31536000` (measured) — Supabase composes the header itself, so
+the `immutable` directive the design would like is not expressible through the storage API. A
+year is still correct without it: the path is unique and no policy permits an update, so the
+bytes at a URL cannot change.
+
+**The public URL embeds the project ref and the bucket name.**
+`<url>/storage/v1/object/public/<bucket>/<path>` is written out rather than obtained from
+`getPublicUrl()`, which is what lets `url()` be synchronous and pure. The cost is that moving
+the project or renaming the bucket invalidates every URL already stored in a collection document —
+a data migration, not a config change. (So is moving the tables, so a host doing this has one
+either way.)
+
+**The bucket limit is not the last limit.** Above `file_size_limit` sits the project's global
+upload ceiling, which is plan-dependent and which the SQL above cannot set. A rejection at either
+layer arrives as a storage error whose message the widget shows verbatim under the field.
+
+**`allowed_mime_types` takes `image/*`.** The wildcard form is what the SQL above uses. It is
+accepted by the dashboard's bucket editor; confirm it on your own project when you apply the
+section, because a bucket that silently narrowed it rejects uploads with a MIME error that looks
+like a widget bug.
+
+**The media adapter's shell is eager, mounted or not.** [src/react.tsx](src/react.tsx) statically
+imports the provider that builds it, so roughly 1.2 KB of adapter shell ships in the provider
+chunk to every visitor of a Supabase-backed site — with or without a `media` prop (measured: the
+eager JS is byte-identical either way). The Storage SDK itself is not in it: like the rest of
+`@supabase/ssr` it is behind the dynamic `import()` in `ensureSupabase()`.

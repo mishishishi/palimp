@@ -14,7 +14,8 @@
  */
 
 // ---------------------------------------------------------------------------
-// The field vocabulary — the minimal seven, Sveltia-named.
+// The field vocabulary — the minimal seven, Sveltia-named, plus `image`
+// (docs/plans/collections/03-media.md).
 
 export type CollectionField =
   | StringField
@@ -23,7 +24,8 @@ export type CollectionField =
   | BooleanField
   | SelectField
   | ObjectField
-  | ListField;
+  | ListField
+  | ImageField;
 
 interface FieldBase {
   readonly name: string;
@@ -45,6 +47,24 @@ export interface SelectField  extends FieldBase { readonly widget: "select";  re
 export interface ObjectField  extends FieldBase { readonly widget: "object";  readonly fields: ReadonlyArray<CollectionField> }
 /* prettier-ignore */
 export interface ListField    extends FieldBase { readonly widget: "list";    readonly fields: ReadonlyArray<CollectionField>; readonly min?: number; readonly max?: number }
+
+/**
+ * The eighth widget, and the only one whose value the owner cannot type from
+ * memory. What it stores is a public URL — not a storage path — so nothing
+ * resolves it on the server, in the live map or for a visitor: the card
+ * renders `<img src={item.photo}>` and palimp is not in the render path. The
+ * corollary is that a hand-typed repo path (`/images/hero.jpg`) is a working
+ * value with no media adapter mounted at all. Alt text is a sibling field the
+ * schema declares, never metadata on the file.
+ */
+export interface ImageField extends FieldBase {
+  readonly widget: "image";
+  /** An HTML `accept` string for the picker. Default "image/*". */
+  readonly accept?: string;
+  /** Client-side size gate, bytes. No default — the bucket's limit is the backstop. */
+  readonly maxBytes?: number;
+  readonly default?: string;
+}
 
 // ---------------------------------------------------------------------------
 // The item-type inference.
@@ -75,7 +95,9 @@ type FieldValue<F extends CollectionField> =
                     ReadonlyArray<CollectionField>;
                 }
               ? ReadonlyArray<CollectionItem<FS>>
-              : never;
+              : F extends { readonly widget: "image" }
+                ? string
+                : never;
 
 type Prettify<T> = { [K in keyof T]: T[K] } & {};
 
@@ -301,6 +323,21 @@ export const validateCollectionItems = (
                 message: `does not match pattern ${JSON.stringify(field.pattern)}`,
               });
             }
+          }
+          restricted[field.name] = raw;
+          break;
+        }
+        case "image": {
+          // Stricter than `string`: an empty src makes the browser re-request
+          // the page itself, so "" is a broken image rather than a blank
+          // field. The modal never produces one — clearing deletes the key.
+          if (typeof raw !== "string") {
+            problems.push({
+              path,
+              message: `expected a string, got ${describe(raw)}`,
+            });
+          } else if (raw === "") {
+            problems.push({ path, message: "must be a non-empty string" });
           }
           restricted[field.name] = raw;
           break;

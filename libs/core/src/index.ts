@@ -23,6 +23,7 @@ export type {
   CollectionProblem,
   CollectionRegistration,
   CollectionSchema,
+  ImageField,
   ListField,
   NumberField,
   ObjectField,
@@ -34,6 +35,7 @@ export type {
 export { PalimpGeneralContext } from "./PalimpGeneralContext.ts";
 export { PalimpClientBackendContext } from "./PalimpClientBackendContext.ts";
 export { PalimpPublishContext } from "./PalimpPublishContext.ts";
+export { PalimpMediaContext } from "./PalimpMediaContext.ts";
 
 export type { PalimpClientBackendAdapter } from "./PalimpClientBackendAdapter.ts";
 export type {
@@ -42,3 +44,7 @@ export type {
   PublishRunStatus,
   PublishRunConclusion,
 } from "./PalimpPublishAdapter.ts";
+export type {
+  PalimpMediaAdapter,
+  PalimpMediaAsset,
+} from "./PalimpMediaAdapter.ts";
