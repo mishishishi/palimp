@@ -222,7 +222,9 @@ export const varieties = defineCollection({
 ```
 
 Eight widgets (`string`, `text`, `number`, `boolean`, `select`, `object`, `list`, `image`)
-with `required` / `pattern` / `min` / `max`. The item type is inferred — `defineCollection`'s `const`
+with `required` / `pattern` / `min` / `max` / `unique`. A field feeding `generateStaticParams` wants
+`unique: true`: two items with one slug would otherwise be one route for two items, and a
+duplicate is dropped at build instead. The item type is inferred — `defineCollection`'s `const`
 type parameter means `options: ["a", "b"]` narrows to `"a" | "b"` with no `as const` — and
 `defaultItems` is checked against it, so a bad seed fails `check-types`, not the build. An
 optional field's absence is meaningful and preserved: under `exactOptionalPropertyTypes` an

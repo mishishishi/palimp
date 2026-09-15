@@ -45,6 +45,8 @@ export const DevtoolsContent = () => {
         {save.isPending ? "Saving..." : `Save (${save.length})`}
       </Button>
 
+      {save.contextHolder}
+
       <Button {...preview.props} block>
         {preview.preview ? "Edit mode" : "Preview mode"}
       </Button>

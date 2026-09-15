@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phases 1–3 built, verified on Supabase and merged (v1.7.0, `48f6417`); phase 4 planned · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phases 1–3 built, verified on Supabase and merged (v1.7.0, `48f6417`); phase 4 built and verified on its own branch (v1.8.0), not merged · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -86,7 +86,7 @@ compiling the alternative.
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
 | 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built and merged into `pr/08-collections` (`09be3cd`, v1.6.0); verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
 | 3 — media seam | [03-media.md](03-media.md) — written 2026-08-31, divergence note appended | **built and merged into `pr/08-collections` (`48f6417`, v1.7.0); verified incl. the credentialed pass on Supabase (2026-08-31; §E's eager-JS estimate was low — the be-supabase media shell is ≈ 1,160 B and eager whether or not `media` is mounted) — the Firebase adapter deferred by D14, the authenticated update/delete refusal half-tested, Publish still unrun** |
-| 4 — save integrity | [04-save-integrity.md](04-save-integrity.md) — written 2026-09-15 | **planned; not built** |
+| 4 — save integrity | [04-save-integrity.md](04-save-integrity.md) — written 2026-09-15, divergence note appended | **built on `pr/08-collections-04-save-integrity` (v1.8.0), not merged; verified incl. the credentialed pass on Supabase (2026-09-15; visitor HTML +16 B, eager JS unchanged) — "first occurrence wins" is positional, so a renamed copy marks the later item (divergence 1); Publish and Firebase unrun** |
 | 5 — demand-driven extensions | `05-extensions.md` | unscoped; opened only on demand. Renumbered from 4 on 2026-09-15 — plans 00–03 call it "phase 4" |
 
 ### Phase 1 — collections core → `01-core.md`
@@ -175,10 +175,10 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **Build phase 4** — an implementation session builds exactly
-   [04-save-integrity.md](04-save-integrity.md) on a branch off this one
-   (`pr/08-collections-04-save-integrity`), 1.8.0 lockstep inside the feature commit, and runs the
-   credentialed pass on Supabase.
+1. **Merge phase 4** — `pr/08-collections-04-save-integrity` into this branch, then run the
+   Publish rebuild from the collections branch, closing the Publish check all four phases share.
+   Divergence 1 (a renamed Duplicate copy marks the *later* item) was accepted as a documented
+   quirk on 2026-09-15; no order-independent rule is planned.
 2. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
    provisioned on the Firebase project — new files in `be-firebase`, the `## Cloud Storage`
    README section replacing the placeholder quirk, its own divergence entry, its own lockstep

@@ -324,7 +324,9 @@ Points worth knowing:
   backends stay untouched: the document *is* the enumeration, and add / delete / reorder are all
   "save the new document" — one `editsStore` entry in the same batch as prose edits. The build
   reads it through `collection()` beside `palimp()`, drops invalid items with a warning, and
-  never throws on data. Item prose is not in the document; it stays flat keys derived from the
+  never throws on data; the drawer's Save lists the pending items the build will drop before
+  writing them, and asks rather than blocks
+  ([plans/collections/04-save-integrity.md](plans/collections/04-save-integrity.md)). Item prose is not in the document; it stays flat keys derived from the
   item id (`varieties.<id>.body`, computed by `collectionItemKey`). Structural liveness is
   opt-in per list through `<PalimpCollectionList>`: the `EditComponent` re-read mechanism one
   level up, admin-only — the wrapper resolves `pending ?? fetched ?? staleDocument` on the same

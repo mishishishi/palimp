@@ -31,6 +31,14 @@ interface FieldBase {
   readonly name: string;
   readonly label?: string;
   readonly required?: boolean;
+  /**
+   * No two values of this field may be equal among the items of the nearest
+   * enclosing array — every item of the collection for a top-level or `object`
+   * field, the entries of one list for a field inside a `list`. The later
+   * duplicate is invalid and, at build, dropped. Empty and absent values never
+   * collide. Meaningful on string, text, number, select and image.
+   */
+  readonly unique?: boolean;
 }
 
 /* prettier-ignore */
@@ -262,6 +270,16 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
 const describe = (value: unknown): string =>
   value === null ? "null" : Array.isArray(value) ? "an array" : `a ${typeof value}`;
 
+type UniqueScope = Map<string, Set<string>>;
+
+/** The widgets `unique` means something on (D16). */
+const isUniqueWidget =(field: CollectionField): boolean =>
+  field.widget === "string" ||
+  field.widget === "text" ||
+  field.widget === "number" ||
+  field.widget === "select" ||
+  field.widget === "image";
+
 export const validateCollectionItems = (
   schema: Pick<AnyCollectionSchema, "fields" | "idField">,
   values: ReadonlyArray<unknown>,
@@ -285,17 +303,50 @@ export const validateCollectionItems = (
     return patterns.get(pattern) ?? null;
   };
 
+  // A misplaced `unique` is the developer's mistake, like a malformed
+  // pattern: reported once per declared field, the check simply not run. Found
+  // by walking the declaration rather than the items, so it is reported
+  // whether or not any item carries the field.
+  const reportMisplacedUnique = (
+    fields: ReadonlyArray<CollectionField>,
+    prefix: string,
+  ): void => {
+    for (const field of fields) {
+      const path = prefix === "" ? field.name : `${prefix}.${field.name}`;
+      if (field.unique && !isUniqueWidget(field)) {
+        schemaProblems.push(
+          `unique is ignored on ${JSON.stringify(path)} — it applies to string, text, number, select and image fields`,
+        );
+      }
+      if (field.widget === "object" || field.widget === "list") {
+        reportMisplacedUnique(field.fields, path);
+      }
+    }
+  };
+  reportMisplacedUnique(schema.fields, "");
+
+  /**
+   * `scope` is where a unique value registers: field path relative to the
+   * scope's element → the values seen so far. One scope per call for the
+   * items, a fresh one per list value for its entries (§B, D16).
+   */
   const checkFields = (
     fields: ReadonlyArray<CollectionField>,
     value: Record<string, unknown>,
     prefix: string,
     problems: CollectionItemProblem[],
+    scope: UniqueScope,
+    scopePrefix: string,
+    inList: boolean,
   ): Record<string, unknown> => {
     const restricted: Record<string, unknown> = {};
 
     for (const field of fields) {
       const path = prefix === "" ? field.name : `${prefix}.${field.name}`;
+      const scopePath =
+        scopePrefix === "" ? field.name : `${scopePrefix}.${field.name}`;
       const raw = value[field.name];
+      const problemsBefore = problems.length;
 
       // Absent means absent — the item is assembled by omission, never by
       // assigning undefined (§A; exactOptionalPropertyTypes describes the wire
@@ -381,7 +432,15 @@ export const validateCollectionItems = (
         }
         case "object": {
           if (isPlainObject(raw)) {
-            restricted[field.name] = checkFields(field.fields, raw, path, problems);
+            restricted[field.name] = checkFields(
+              field.fields,
+              raw,
+              path,
+              problems,
+              scope,
+              scopePath,
+              inList,
+            );
           } else {
             problems.push({
               path,
@@ -412,6 +471,9 @@ export const validateCollectionItems = (
               message: `has more than the maximum ${field.max} entries`,
             });
           }
+          // Uniqueness inside a list is among that list's entries, so the
+          // same value in two different items' lists does not collide.
+          const listScope: UniqueScope = new Map();
           restricted[field.name] = raw.map((entry, index) => {
             const entryPath = `${path}[${index}]`;
             if (!isPlainObject(entry)) {
@@ -421,9 +483,47 @@ export const validateCollectionItems = (
               });
               return entry;
             }
-            return checkFields(field.fields, entry, entryPath, problems);
+            return checkFields(
+              field.fields,
+              entry,
+              entryPath,
+              problems,
+              listScope,
+              "",
+              true,
+            );
           });
           break;
+        }
+      }
+
+      // Only a value that passed its own checks takes part: a duplicate line
+      // about a value that is wrong anyway is noise. "" never collides — an
+      // empty required field is a missing value, not a uniqueness problem.
+      // The top-level id field is left to the id rule below, which already
+      // reports a repeat.
+      if (
+        field.unique &&
+        isUniqueWidget(field) &&
+        problems.length === problemsBefore &&
+        raw !== "" &&
+        !(prefix === "" && field.name === schema.idField)
+      ) {
+        // typeof-prefixed so values of different types never collide, and
+        // String(-0) is "0", so -0 equals 0.
+        const token = `${typeof raw}:${String(raw)}`;
+        let seen = scope.get(scopePath);
+        if (!seen) {
+          seen = new Set();
+          scope.set(scopePath, seen);
+        }
+        if (seen.has(token)) {
+          problems.push({
+            path,
+            message: `duplicate value ${JSON.stringify(raw)} — ${inList ? "another entry in this list" : "another item"} already has it; the first occurrence wins`,
+          });
+        } else {
+          seen.add(token);
         }
       }
     }
@@ -431,6 +531,7 @@ export const validateCollectionItems = (
     return restricted;
   };
 
+  const itemScope: UniqueScope = new Map();
   const seenIds = new Set<string>();
 
   const checks = values.map((value): CollectionItemCheck => {
@@ -444,7 +545,15 @@ export const validateCollectionItems = (
     }
 
     const problems: CollectionItemProblem[] = [];
-    const item = checkFields(schema.fields, value, "", problems);
+    const item = checkFields(
+      schema.fields,
+      value,
+      "",
+      problems,
+      itemScope,
+      "",
+      false,
+    );
 
     // Ids derive prose keys, so two items sharing one would silently share
     // their prose: the duplicate invalidates the *later* item, first

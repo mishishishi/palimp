@@ -397,3 +397,80 @@ which the dogfood already proves.
    - The Publish rebuild stays blocked on the deploy workflow building `main`, as in phases 1–3.
 
 **If any part of item 5 was not run, the landing note says so, item by item.**
+
+## Divergence note (2026-09-15, implementation)
+
+Built as specified — §D's file list, and §D's "what does not change" list intact (no contract,
+`editsStore`, `collectionsStore`, parse ladder, `LiveCollectionList`, `FieldsEditor`/`FieldControl`/
+`newItem` or `exports` map moved; `fe-next` is README-only). The departures:
+
+1. **"First occurrence wins" is positional, and Duplicate inserts the copy *before* every later
+   item — so renaming a copy onto a later item's value marks the later item, not the copy.** Found
+   by driving item 5: duplicating `gros-michel` places the copy at #1, and typing `Manzano` into
+   its Name marked the **stored** `manzano` (#4) invalid, removed *that* live card, and left the
+   copy's card showing "Manzano". The walkthrough expected the mark under the field being typed
+   into. The validator does exactly what D16 says, the confirm listed exactly the item the build
+   then dropped, and the stored item is recoverable by fixing either one — so nothing was changed,
+   but it is the likeliest way an owner meets `unique`, and it is now a core README quirk. An
+   order-independent rule (mark every holder of a repeated value, or the most recently edited) is
+   a design change for a later plan, not a fix.
+2. **A misplaced `unique` is found by walking the declaration, not the items.** §B said it is
+   "deduplicated the way malformed patterns are", which would only report it when some item
+   carries the field. Walking `fields` once up front reports it whether or not any item does,
+   including for a collection with no items and for a field inside a `list` nobody has added an
+   entry to. The message names the declared dotted path (`"gallery.featured"`), with no list
+   indices.
+3. **`useSaveButton.tsx` gained a module-local `isPlainObject`** — the third copy in `core` — to
+   read the raw id without a cast. The confirm's collection label is `label ?? name`, so on the
+   dogfood (no `label`) the lines read `varieties — #4 manzano: …`, lowercase.
+
+**Landing notes.** Verification status, item by item.
+
+**Items 1–4 ran and pass.** Item 1: `check-types` clean across the libs, and `tsc --noEmit` clean in
+both examples with the dogfood's `unique: true`. Item 2: `pnpm build` clean, every `exports` map
+unchanged. Item 3: thirteen fixtures against the built `dist`, no backend, all passing — every
+case §Verification lists, plus a unique `text` field holding `"3"` then `3` (no duplicate line),
+`unique` on an `object` and on a boolean inside a `list` (two schema problems, nested path named),
+and `formatCollectionProblem` on the dropped item producing
+`palimp: collection "varieties" — item 1 (b), field "name": duplicate value "X" — another item
+already has it; the first occurrence wins`. `copyForDuplicate` was additionally exercised as an
+extracted copy under Node's type stripping (id, unique string, unique `text` inside an `object`
+suffixed; unique `number` and `select` removed; list copied whole; `-copy`, `-copy-2`,
+stem-stripped `-copy-3`) before item 5 drove the real one. Item 4 (stub-adapter static export of
+the supabase example, against a 087be50 baseline built the same way): `out/index.html`
+25,164 → **25,180** (+16 B — exactly `"unique":true,` escaped, one occurrence); eager JS
+645,649 → **645,649**, byte-identical; "Save anyway" in one chunk, which `index.html` does not
+reference; zero `data-palimp-editor` in the visitor HTML.
+
+**Item 5 ran 2026-09-15 against real Supabase credentials**, CDP-driving a signed-in session in the
+dev server:
+
+- **Duplicate** `gros-michel` → `gros-michel-copy` / `Gros Michel-copy`, no validity mark, live card
+  appeared; the original again → `-copy-2`; `gros-michel-copy` → `-copy-3`. The copy's prose editor
+  rendered its own key (`varieties.gros-michel-copy-3.body`, as the placeholder of an empty editor).
+- **Rename a copy's Name to `Manzano`** → a mark appeared as it was typed and a live card
+  disappeared — on the stored `manzano`, per divergence 1.
+- **Save** → the confirm listed exactly that one item with its first problem; **Keep editing** →
+  closed, zero write requests (a `fetch` wrapper logged every non-GET), `Save (1)` unchanged, rows
+  intact; **Escape** → the same, and it closed only the confirm, not the Collections modal under it.
+- **The dialog rendered in the drawer's antd theme** — the same `css-dev-only-…` / `css-var-root`
+  classes as the drawer, themed primary button, screenshot checked.
+- **Save anyway** → one `setKeys` POST to `/rest/v1/inline?on_conflict=key`, `Save (0)`; after a
+  reload the item was still there, still marked, with the message under Name.
+- **A full static export against the real table** → the build log carried
+  `palimp: collection "varieties" — item 2 (manzano), field "name": duplicate value "Manzano" — …`,
+  and the visitor HTML had six cards for seven stored items.
+- **A pending prose edit with a stored invalid item and no pending collection draft** → no
+  confirm, one POST carrying only `hero.lead`. This is the stricter form of "a pending prose edit
+  alone", which it therefore also covers.
+- **The fix, together with a prose edit** → deleting the copy made the pending collection valid;
+  Save with the prose revert pending as well → no confirm, **one** POST carrying both keys. The plan
+  said "fix the name"; deleting the copy was chosen instead so the demo project ends where it
+  started, and it exercises the same path.
+
+**Not run, and why:** the **Publish** rebuild, blocked on the deploy workflow building `main`, as
+in phases 1–3; and **anything Firebase** — the firebase example's schema change is typechecked
+only, for want of Firebase credentials.
+
+**Test data left in the demo project:** none. The collection document is back to its six items and
+`hero.lead` to its original text; the only trace is the rows' updated timestamps.

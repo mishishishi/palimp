@@ -21,6 +21,7 @@ import {
   readCollectionDocument,
   serializeCollectionDocument,
   validateCollectionItems,
+  type CollectionDeclaration,
   type CollectionField,
   type CollectionItemProblem,
 } from "../../collections.ts";
@@ -182,7 +183,11 @@ const CollectionEditor = ({
 
   const duplicateItem = (index: number) => {
     const next = [...workingItems];
-    next.splice(index + 1, 0, structuredClone(workingItems[index]));
+    next.splice(
+      index + 1,
+      0,
+      copyForDuplicate(declaration, workingItems[index], workingItems),
+    );
     commit(next);
     setSelected(index + 1);
   };
@@ -676,6 +681,77 @@ const newItem = (
   }
 
   return item;
+};
+
+/**
+ * A copy that is valid by construction (D17). The id field and every `unique`
+ * `string`/`text` field get the first free `-copy`, `-copy-2`, … suffix on
+ * the value's stem; `unique` `number`/`select`/`image` fields are left out,
+ * since no suffix is safe for them and inventing a value is the coercion §B
+ * rejects. The walk goes into `object` fields but not into `list` ones, which
+ * are copied whole so their internal uniqueness survives.
+ *
+ * Every working item counts as holding its value, invalid ones included:
+ * fixing that item would otherwise create the duplicate.
+ */
+const copyForDuplicate = (
+  declaration: CollectionDeclaration,
+  item: unknown,
+  workingItems: ReadonlyArray<unknown>,
+): unknown => {
+  const copy = structuredClone(item);
+  if (!isPlainObject(copy)) return copy;
+
+  const walk = (
+    fields: ReadonlyArray<CollectionField>,
+    target: Record<string, unknown>,
+    path: ReadonlyArray<string>,
+  ) => {
+    for (const field of fields) {
+      const fieldPath = [...path, field.name];
+      const value = target[field.name];
+
+      switch (field.widget) {
+        case "object":
+          if (isPlainObject(value)) walk(field.fields, value, fieldPath);
+          break;
+        case "string":
+        case "text": {
+          const isId = path.length === 0 && field.name === declaration.idField;
+          if (!(isId || field.unique) || typeof value !== "string") break;
+          if (value === "") break;
+
+          const held = new Set(
+            workingItems.map((other) => readPath(other, fieldPath)),
+          );
+          const stem = value.replace(/-copy(-\d+)?$/, "");
+          let candidate = `${stem}-copy`;
+          for (let n = 2; held.has(candidate); n++) {
+            candidate = `${stem}-copy-${n}`;
+          }
+          target[field.name] = candidate;
+          break;
+        }
+        case "number":
+        case "select":
+        case "image":
+          if (field.unique) delete target[field.name];
+          break;
+      }
+    }
+  };
+
+  walk(declaration.fields, copy, []);
+  return copy;
+};
+
+const readPath = (item: unknown, path: ReadonlyArray<string>): unknown => {
+  let current = item;
+  for (const name of path) {
+    if (!isPlainObject(current)) return undefined;
+    current = current[name];
+  }
+  return current;
 };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>

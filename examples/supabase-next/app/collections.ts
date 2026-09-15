@@ -15,7 +15,15 @@ export const varieties = defineCollection({
       pattern: "^[a-z0-9-]+$",
       label: "Id (slug)",
     },
-    { name: "name", widget: "string", required: true, label: "Name" },
+    // Unique: two varieties with one name is an editorial mistake, and the
+    // field Duplicate's `-copy` suffix lands on besides the id.
+    {
+      name: "name",
+      widget: "string",
+      required: true,
+      unique: true,
+      label: "Name",
+    },
     // Optional, and `defaultItems` seeds none: the seed has to work against
     // an empty database with no bucket, which is the whole point of having
     // one. A card renders without an image until the owner adds one.

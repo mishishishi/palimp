@@ -226,8 +226,32 @@ failed save keeps it. The one escape hatch is **Discard changes** per collection
 `editsStore.delete(key)` behind a confirm, because it discards every item's changes at once.
 
 Validation (the same `validateCollectionItems` the build uses) is display-only: it marks fields
-and items and never blocks a keystroke. The build side is stricter — `parseCollectionDocument`
-drops invalid items with a warning and never throws on data.
+and items and never blocks a keystroke — and Save asks before committing items the build will
+drop. The build side is stricter — `parseCollectionDocument` drops invalid items with a warning
+and never throws on data.
+
+Beside `required`, `pattern`, `min` and `max`, a field can be **`unique`**: no two values equal
+among the items of the nearest enclosing array — every item of the collection for a top-level or
+`object` field, the entries of one list for a field inside a `list`. Exact match, first occurrence
+wins, the later item invalid — the id rule, generalised. It means something on `string`, `text`,
+`number`, `select` and `image`; on `boolean`, `object` or `list` it compiles, is reported once as
+a schema problem, and is ignored. Design record:
+[docs/plans/collections/04-save-integrity.md](../../docs/plans/collections/04-save-integrity.md).
+
+**Save confirms, it does not block.** When a pending draft of a registered collection holds items
+the next build would drop — the same `readCollectionDocument` and `validateCollectionItems` calls
+the build makes, on the same string — the drawer's Save opens "Some items won't appear on the
+site", one line per item with its first problem, and **Save anyway** / **Keep editing**. Save is
+one all-or-nothing batch, so a disabled button would hold every other pending edit hostage to one
+bad item; a saved invalid item stays in the document, marked, and publishes once fixed. Stored
+invalid items with no pending draft, schema problems, and prose edits never trigger it. The
+dialog comes from `Modal.useModal()`, so it renders inside the host's antd theme.
+
+**Duplicate makes a valid copy.** The id field and every `unique` `string`/`text` field outside a
+`list` get the first free `-copy`, `-copy-2`, … suffix on the value's stem (duplicating
+`gros-michel-copy` yields `gros-michel-copy-2` or later, never `gros-michel-copy-copy`). `unique`
+`number`, `select` and `image` fields are left out of the copy — no suffix is safe for them.
+Lists are copied whole.
 
 Unlike the Fields modal, nothing in here is an `EditComponent`: the controls are ordinary antd
 inputs, nothing carries `[data-palimp-editor]`, and the interaction guard never sees their
@@ -350,6 +374,32 @@ about collections would mean teaching `editsStore` about its values, and not kno
 it has survived every feature unchanged. The compensation is local: a dirty dot on the
 collection's tab and a dirty mark per changed item.
 
+**A duplicate `unique` value is dropped at build like any other invalid item.** `unique` is not a
+warning: a host building routes from a slug-like field is the one that needs it to bite. The
+modal marks the later item as it is typed, a live list drops it, Save's confirm lists it, and the
+build leaves it out with a `palimp: collection` line. "First" means first **by position**, not
+first written: Duplicate inserts the copy right after the original, so renaming that copy onto the
+value of an item further down marks — and on the live list and at build, drops — the item further
+down, not the copy being typed into. Fixing either one restores it. Two admins can still each add the same
+value in separate sessions — the second Save overwrites the first document, as above.
+
+**Empty and absent never collide.** Two items with `""` or no value in a `unique` field are both
+valid on uniqueness grounds, so an optional unique field stays optional; a required one says
+"required field is missing" instead. Equality is exact — no trimming, no case folding (`pattern`
+is the tool for normalising input) — and typed, so `3` and `"3"` do not collide while `0` and
+`-0` do.
+
+**Duplicate does not copy prose, and leaves unique non-text fields out.** An item's prose lives in
+keys derived from its id, and the copy has a new id, so its prose renders its own keys until
+typed into — what an added item does. The modal cannot enumerate which derived keys a host uses,
+so copying them is not on offer. A `unique` `number`, `select` or `image` field is absent on the
+copy; if it is required, the validity mark says so. A host `pattern` that rejects `-copy` leaves
+the copy invalid, with the pattern problem marked — the host's rule wins.
+
+**The Save confirm checks only collections registered on the current page.** A collection draft
+left pending after client-side navigation away from the page that registered it has no
+declaration to validate against, and saves without the check.
+
 **An uploaded file is public the moment it is chosen — before Save, before Publish.** The widget
 uploads on selection, so between choosing a file and publishing the page there is a window in
 which the bytes are reachable by anyone holding the URL while the item referencing them is still
@@ -359,7 +409,8 @@ show the image it is about to get.
 
 **Nothing deletes media, and orphans arrive four ways.** Deleting an item whose photo was
 uploaded; **Discard changes** after an upload; re-uploading a file (a new timestamp, a new
-object); and Duplicate, which copies the URL verbatim so two items share one file — which is the
+object); and Duplicate, which copies the URL verbatim so two items share one file (unless the field is
+`unique`, which Duplicate leaves out) — which is the
 sharpest reason there is no delete-on-item-delete. Orphaned objects are the same category as the
 orphaned prose rows both earlier collections phases documented: visible, cleaned up by hand in
 the backend console. A "delete this file" affordance would need a reference check across items,
