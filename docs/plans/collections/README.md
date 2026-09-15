@@ -1,6 +1,6 @@
 # Collections — the plan set
 
-**Status:** phases 1–3 built, verified on Supabase and merged (v1.7.0, `48f6417`) · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
+**Status:** phases 1–3 built, verified on Supabase and merged (v1.7.0, `48f6417`); phase 4 planned · **Started:** 2026-08-19 · **Branch:** `pr/08-collections`
 
 Typed, repeatable entities the site owner adds, edits, reorders and removes unaided — the feature
 the host adoption established palimp cannot currently model, and the largest one planned. The full
@@ -53,6 +53,11 @@ and the condition under which the recommendation flips. D10 departs from this fi
 brief (it stores a URL, not a path), for reasons found in the source rather than the brief. D14
 narrows the brief's "both backends" to Supabase, on the user's word that Firebase Storage will
 not exist before the feature ships.
+D15–D17 were answered **2026-09-15**, in the phase-4 planning session and before
+[04-save-integrity.md](04-save-integrity.md) was written. The phase was not in this file's map: the
+host found, by reading the source, that an invalid item saves and is then dropped at build with
+only a log line to say so. D15 is the user's call; D16's placement of `unique` was decided by
+compiling the alternative.
 
 | # | question | answer (2026-08-19) | why |
 | --- | --- | --- | --- |
@@ -70,6 +75,9 @@ not exist before the feature ships.
 | D12 | Seam shape and feature detection (2026-08-31) | **The publish seam's shape** — `PalimpMediaAdapter` + nullable `PalimpMediaContext` in `core`, the widget disables Upload with "No media provider" — with the implementations mounted through an optional **`media` prop on each existing backend provider**, not a second provider | Publishing is a different service with its own credentials, so it has its own provider; media lives in the same project, key and session as the rows, so a separate provider would repeat them. The bare context stays the seam for any third-party or git-backed adapter |
 | D13 | Upload timing, paths and orphans (2026-08-31) | **Upload on selection**; paths are `<collection>/<timestamp>-<rand>-<name>`, never overwritten (`upsert: false` plus create-only rules), `Cache-Control: immutable`; nothing deletes; orphans accepted | Deferring to Save needs a non-string draft layer, a media-aware save path and a live card that cannot show the image — three invariants for one class of leftover the landing notes already document (prose rows outlive items). Never-overwritten is what makes a stored URL stable across rebuilds by construction |
 | D14 | Which backends does phase 3 implement? (2026-08-31) | **Supabase only.** The Firebase adapter is designed in 03-media.md §E and deferred; the firebase example mounts no `media` prop and runs the degraded widget | Cloud Storage for Firebase is not provisioned and will not be before the feature is published; the house rule verifies admin behaviour against a real backend or records it unrun, and a whole adapter recorded unrun is a liability, not a deliverable. The seam is backend-agnostic, so the follow-up is new files in `be-firebase` with no `core` change — and the firebase example is the one real page exercising D12's "lose only the upload button" |
+| D15 | Does Save block on invalid collection items? (2026-09-15) | **No — it confirms.** Save lists the pending collection items the build will drop, with "Save anyway" | Save is one all-or-nothing `setKeys` batch, so a block would hold every other pending edit hostage to one bad item; a saved invalid item loses nothing — it stays in the document, marked, and publishes once fixed |
+| D16 | Shape and scope of `unique` (2026-09-15) | **On `FieldBase`**, meaningful on `string`/`text`/`number`/`select`/`image`, misplaced use a schema problem; unique within the **nearest enclosing array**; exact match, first wins, empty and absent never collide; the later duplicate dropped at build | Measured: narrowing the attribute to the scalar interfaces does not reject a misplaced one through `defineCollection`'s `const F` inference, so the type could not keep that promise. Dropping, not warning, because a host building routes from the field is the one that needs it |
+| D17 | What does Duplicate do to unique values? (2026-09-15) | **Suffixes** the id and unique `string`/`text` fields (`-copy`, `-copy-2`, …); **removes** unique `number`/`select`/`image`; copies lists whole; copies no prose | The old whole-item clone made every copy invalid on creation — the likeliest path to the host's dropped item. A suffix yields a valid, visibly copied item without a blocking prompt |
 
 ## Phase map
 
@@ -78,7 +86,8 @@ not exist before the feature ships.
 | 1 — collections core | [01-core.md](01-core.md) — written 2026-08-19, divergence note appended | **built on `pr/08-collections-01-core`; verified incl. the credentialed pass on Supabase (2026-08-20) — Firestore round-trip and a real Publish still unrun** |
 | 2 — live admin rendering | [02-live-rendering.md](02-live-rendering.md) — written 2026-08-20, divergence note appended | **built and merged into `pr/08-collections` (`09be3cd`, v1.6.0); verified incl. the credentialed pass on Supabase (2026-08-21; measured deltas better than §E: payload −1,122 B, eager JS +580 B) — only the Publish step unrun, blocked on the deploy workflow building `main`** |
 | 3 — media seam | [03-media.md](03-media.md) — written 2026-08-31, divergence note appended | **built and merged into `pr/08-collections` (`48f6417`, v1.7.0); verified incl. the credentialed pass on Supabase (2026-08-31; §E's eager-JS estimate was low — the be-supabase media shell is ≈ 1,160 B and eager whether or not `media` is mounted) — the Firebase adapter deferred by D14, the authenticated update/delete refusal half-tested, Publish still unrun** |
-| 4 — demand-driven extensions | `04-extensions.md` | unscoped; opened only on demand |
+| 4 — save integrity | [04-save-integrity.md](04-save-integrity.md) — written 2026-09-15 | **planned; not built** |
+| 5 — demand-driven extensions | `05-extensions.md` | unscoped; opened only on demand. Renumbered from 4 on 2026-09-15 — plans 00–03 call it "phase 4" |
 
 ### Phase 1 — collections core → `01-core.md`
 
@@ -143,7 +152,22 @@ both backends; setup docs good enough to run without guessing. *(Narrowed 2026-0
 stores the URL — D10 — and the implementation is Supabase only, the Firebase adapter deferred
 — D14.)*
 
-### Phase 4 — demand-driven extensions → `04-extensions.md`
+### Phase 4 — save integrity → `04-save-integrity.md`
+
+**Goal:** an owner cannot commit an item that will not publish without being told, and Duplicate
+stops producing such items.
+
+**In:** a confirm on the drawer's Save listing pending collection items the build will drop (D15);
+a `unique` field attribute in the shared validator (D16); Duplicate giving the copy unique values
+(D17); `unique: true` on the dogfood's `name`; README and quirks updates; lockstep 1.8.0.
+
+**Out:** blocking Save, partial saves, case-insensitive uniqueness, cross-collection uniqueness,
+copying prose on Duplicate, any contract or adapter change.
+
+**Exit criteria:** the plan's verification list, including the credentialed Supabase pass —
+Duplicate, the confirm's three outcomes, and a static export showing the dropped item.
+
+### Phase 5 — demand-driven extensions → `05-extensions.md`
 
 Unscoped by design; opened only when a real host needs one of: a relation widget fed from another
 collection, conditional field visibility (`showWhen`), or the per-item-keys storage mode (the
@@ -151,13 +175,17 @@ migration the document's `v` field exists for).
 
 ## Next steps
 
-1. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
+1. **Build phase 4** — an implementation session builds exactly
+   [04-save-integrity.md](04-save-integrity.md) on a branch off this one
+   (`pr/08-collections-04-save-integrity`), 1.8.0 lockstep inside the feature commit, and runs the
+   credentialed pass on Supabase.
+2. **The Firebase media adapter** (03-media.md §E, deferred by D14) when Cloud Storage is
    provisioned on the Firebase project — new files in `be-firebase`, the `## Cloud Storage`
    README section replacing the placeholder quirk, its own divergence entry, its own lockstep
    bump. Not before. Note that §E's Firebase design carries two facts to re-check against the
    console rather than trust: the default bucket name, and the plan requirement for projects
    created after October 2024.
-2. **Phase 4 opens only on demand.** Unrun items to close when circumstances allow: the Firestore
+3. **Phase 5 opens only on demand.** Unrun items to close when circumstances allow: the Firestore
    round-trip and the firebase example's admin rendering (both need Firebase credentials); the
    added-item-renders-after-rebuild Publish check (needs a collections branch to be what the
    deploy workflow builds), shared by all three phases; and phase 3's authenticated
