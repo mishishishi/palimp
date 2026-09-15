@@ -1,12 +1,17 @@
 {
   "name": "@palimp/core",
-  "version": "1.4.0",
+  "version": "1.8.0",
   "description": "",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./collections": {
+      "types": "./dist/collections.d.ts",
+      "import": "./dist/collections.js"
     },
     "./admin": {
       "types": "./dist/Admin/index.d.ts",

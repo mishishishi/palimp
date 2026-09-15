@@ -134,3 +134,16 @@ no work until `loadMessages()` is called.
 
 **Only email/password login.** `LoginValue` in `core` has one member. Anonymous auth, OAuth
 providers, and magic links would be a `core` change first, then an adapter change.
+
+**There is no Firebase media adapter yet, so mount no `media` prop.** `@palimp/core`'s media
+seam (`PalimpMediaAdapter`, `PalimpMediaContext`) is implemented for Supabase Storage only. The
+Cloud Storage implementation is designed in
+[docs/plans/collections/03-media.md](../../docs/plans/collections/03-media.md) §E and deferred
+until the demo project has a bucket to verify it against — the house rule is that admin behaviour
+is checked against a real backend or recorded as unrun, and a whole adapter recorded as unrun is a
+liability rather than a deliverable. Meanwhile the collections modal's `image` widget runs in its
+degraded mode here: the URL input works and accepts a repo path or an external URL, while Upload
+and Choose existing are disabled with "No media provider". The example dogfoods exactly that, on
+purpose — it is the one real page where that promise is exercised. When Storage is provisioned,
+the adapter lands as new files in this package with no change to `core`, and this quirk becomes a
+`## Cloud Storage` section in the shape of the Firestore rules above.

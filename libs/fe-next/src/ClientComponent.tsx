@@ -19,13 +19,23 @@ export const XcoreClientComponent = ({
   staleValue,
 }: {
   messageKey: string;
-  staleValue: string;
+  // Optional for the one caller that cannot resolve first: a live-mapped
+  // fresh item. p() always resolves and passes a string, so nothing
+  // observable changes for existing pages.
+  staleValue?: string;
 }) => {
   const context = use(PalimpGeneralContext);
 
   if (context.admin) {
-    return <Edit messageKey={messageKey} staleValue={staleValue} textarea />;
+    // EditComponent's existing `pending ?? data ?? staleValue ?? ""` chain
+    // plus its `placeholder={messageKey}` already give a fresh key an empty
+    // editor labelled with its own key.
+    return (
+      <Edit messageKey={messageKey} staleValue={staleValue ?? ""} textarea />
+    );
   }
 
-  return <>{staleValue}</>;
+  // The missing-content-obvious fallback p() applies server-side, applied at
+  // the component when no resolved value was passed.
+  return <>{staleValue ?? messageKey}</>;
 };
