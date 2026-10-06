@@ -20,8 +20,13 @@ export const usePublishRun = () => {
       // asserted away.
       queryFn:
         adapter && token ? () => adapter.getLatestRun(token) : skipToken,
+      // Never stops. A run started anywhere but this tab's Publish button —
+      // another admin, another tab, a push-triggered deploy — only ever shows
+      // up on a refetch, so idling at `false` left the modal reporting the
+      // last run this tab knew about. 60 s while idle, admins only, drawer
+      // mounted.
       refetchInterval: (q) =>
-        q.state.data && q.state.data.status !== "completed" ? 10_000 : false,
+        q.state.data && q.state.data.status !== "completed" ? 10_000 : 60_000,
     },
     queryClient,
   );

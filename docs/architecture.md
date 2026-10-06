@@ -391,7 +391,7 @@ sequenceDiagram
         Note over A: first run with<br/>created_at ≥ dispatchedAt − 5s
     end
     A-->>D: PalimpPublishRun → seeds the query cache
-    D->>GH: refetch every 10s while status ≠ completed
+    D->>GH: refetch every 10s while status ≠ completed, 60s when idle
     CI-->>GH: run completes
     GH-->>D: conclusion → green check / red X, button re-enabled
 ```
@@ -407,11 +407,22 @@ Two GitHub API facts the adapter absorbs so `core` never sees them:
 2. **Run identity is by recency, not id.** `getLatestRun` just reads the newest
    `workflow_dispatch` run of that workflow. No id is stored anywhere, which is exactly why
    reload works with no client-side persistence.
+3. **The runs list is HTTP-cacheable.** api.github.com sends `cache-control: private,
+   max-age=60`, so a default `fetch` would serve the 10 s poll out of the browser cache for up to
+   a minute — stale status and stale run id. Both queries send `cache: "no-store"`, which costs
+   the conditional-request rate-limit exemption.
 
-Both queries filter on `event=workflow_dispatch`, which keeps push- and PR-triggered runs of the
-same workflow out of the drawer — necessary here, since the deploy workflow is also the publish
-target. The trade is that a push-triggered deploy republishes the site without the drawer ever
-showing it.
+Both queries filter on `event=workflow_dispatch` by default, which keeps push- and PR-triggered
+runs of the same workflow out of the drawer — necessary here, since the deploy workflow is also
+the publish target. The trade is that a push-triggered deploy republishes the site without the
+drawer ever showing it, and can leave the modal naming an older completed dispatch as "latest"
+while that deploy runs. A host for which the filter costs more than it buys can set
+`followAllEvents: true`; `getLatestRun` then ignores the event, while the dispatch-matching
+query in `publish()` keeps filtering.
+
+The poll never stops. It drops to 60 s once the known run is `completed` rather than to `false`,
+because a run started in another tab, by another admin or by a push is otherwise invisible until
+a remount or a window focus.
 
 Matching by dispatch time is a heuristic. Two publishes inside the tolerance window and the
 drawer follows the wrong one — it will still be a dispatch of the right workflow, so the failure
@@ -535,7 +546,7 @@ Documented, not fixed. Each is a real behaviour of the code as it stands.
 | --- | --- |
 | **No tests** | The root `test` script is `echo "Error: no test specified" && exit 1`. `check-types` is the only automated gate. |
 | **`XcoreClientComponent`** | A previous project identity, still in the render path — and `fe-next` also exports `palimp as xcore`. Both are in the public surface, so renaming them is a breaking change. |
-| **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`, and that workflow also fires on `push` and `pull_request`. Sound in intent — the deploy *is* the publish — but the drawer only tracks `workflow_dispatch` runs, so a deploy triggered by a push republishes the site without ever appearing there. |
+| **The publish target is the deploy workflow** | CI sets `NEXT_PUBLIC_GITHUB_WORKFLOW: deploy-supabase.yml` from inside `deploy-supabase.yml`, and that workflow also fires on `push` and `pull_request`. Sound in intent — the deploy *is* the publish — but the drawer tracks only `workflow_dispatch` runs by default, so a deploy triggered by a push republishes the site without appearing there. `followAllEvents: true` trades that blind spot for a Publish button disabled by unrelated push builds. |
 | **Shared query client** | `core`'s `queryClient` is a module singleton, and `logout()` calls `invalidateQueries()` with no key — invalidating every query in it, Palimp's or not. |
 | **Dead input branch** | `p()` always passes `textarea`, so `EditComponent`'s `<input>` branch is unreachable through `fe-next`. It is no longer *weaker* than the textarea — both carry `data-palimp-editor` and the detaching `form` attribute, and the guard suppresses Enter on the input specifically — but it stays untested by any live caller. |
 
