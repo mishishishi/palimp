@@ -50,14 +50,14 @@ ones gate the phase they name and must be answered in writing before that phase 
 | E5 | Order | **02 before 03** (2026-10-06); 01 independent | Undoing the first-ever edit to a string means removing a row. Without `removeKeys` the best available is writing the `defaultMessage` as a literal row, which looks identical today and pins the copy tomorrow |
 | E6 | Version | **1.9.0** (2026-10-06) | Additive across all three: a new exported error class, a widened hook return, an optional interface member, a reserved key prefix. No existing behaviour changes meaning. **Cut by 01 on 2026-10-08** — 02 and 03 now land inside a version that already exists, or bump again if either ships separately |
 | E7 | **Does Reset reach keys with no editor on the page?** | **open** — gates 02 | 02 enumerates mounted and registered keys, which is the set a page can offer. But its own report names the orphaned key — typed into a question the host later deleted, invisible and unremovable — and that key is in no store. Answering "mounted only" is coherent and leaves the reported case unfixed; answering "all stored keys" needs an adapter `listKeys` the interface does not have. Decide before building the modal |
-| E8 | **Who runs the Supabase SQL on an existing project?** | **open** — gates 02 shipping to the host | `grant delete` and a delete policy are a manual step against a live, client-owned database. Until it runs, Reset fails with `42501` and looks like a bug in the feature. Whether that is a release-note instruction, a documented migration file, or a check the drawer performs is undecided |
+| E8 | Who runs the Supabase SQL on an existing project? | **Both: the drawer probes, and a migration file is prepared** (2026-10-08) | The probe is what the host sees: Reset hides itself where the grant is absent, the same shape as `available`/`hasToken` on Publish, so a project that has not run the SQL never shows a button that fails with `42501`. The migration file is written alongside it rather than instead of it, because the current preview project gets migrated when the production setup is ready, and that step needs something reviewable to run — not a paragraph in a release note. **What 02 still has to solve:** Postgres has no cheap read-only way to ask whether a role may delete — either query `information_schema.role_table_grants` or treat the first `42501` as the capability answer and hide Reset from then on |
 
 ## Plan map
 
 | # | plan | status |
 | --- | --- | --- |
 | 01 | [01-publish-failure-is-silent.md](01-publish-failure-is-silent.md) — the dispatch error nothing reads | **built, 2026-10-08, as 1.9.0.** Both halves as written. Eight divergence notes at the bottom of the plan; the load-bearing one is that the auth error class had to split — a generic `PalimpPublishAuthError` in `core`, `GithubAuthError` subclassing it in the adapter — because `instanceof` in the drawer would otherwise invert the dependency direction. **All five verification steps are unrun** (no live host, no revocable PAT); the 401/403 narrowing was verified directly against the built `dist/` with a stubbed `fetch`, which is the mechanism behind step 4 but not step 4 |
-| 02 | [02-reset-to-original.md](02-reset-to-original.md) — the row palimp cannot remove | **not built.** Gated on E7; needs E8 before it reaches the host |
+| 02 | [02-reset-to-original.md](02-reset-to-original.md) — the row palimp cannot remove | **not built.** Gated on E7. E8 answered 2026-10-08: the drawer probes for the delete grant, and a migration file ships beside it |
 | 03 | [03-undo-last-save.md](03-undo-last-save.md) — one reserved key, no schema change | **not built.** Needs 02 |
 
 ## Next step
@@ -72,8 +72,9 @@ ones gate the phase they name and must be answered in writing before that phase 
    and shorten `agent-guidelines/editing-copy.md` §3 — the paragraph that teaches the client to
    check the status panel by hand exists because of this bug.
 
-Then **answer E7 and E8 in writing**, which is what unblocks 02; 03 follows 02. Neither decision
-is affected by anything 01 landed — 01 touched no adapter interface.
+Then **answer E7 in writing**, which is the last thing between 02 and an implementation session —
+E8 was answered on 2026-10-08, in the row above. 03 follows 02. Neither decision is affected by
+anything 01 landed — 01 touched no adapter interface.
 
 ## Where these came from
 
