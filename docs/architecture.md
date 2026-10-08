@@ -165,7 +165,13 @@ dispatch resolves. `getLatestRun` exists so that state survives a page reload wi
 persisting anything: the CI provider is the store, and the query refetches on mount.
 
 The status and conclusion enums are deliberately generic rather than GitHub's own — a GitLab or
-Vercel adapter maps into the same six conclusions without touching any consumer.
+Vercel adapter maps into the same six conclusions without touching any consumer. The seam's one
+**class**, `PalimpPublishAuthError`, is generic for the same reason: an adapter throws it (or a
+subclass) when the provider refuses the token and leaves every other failure a plain `Error`, so
+the drawer can tell "this token is dead" from "this workflow does not exist" with `instanceof`
+and no consumer learns what GitHub is. It lives in `core` beside the interface rather than in the
+adapter because dependencies point inward — `core` cannot import a class from a package that
+imports `core`. `@palimp/publish-github` subclasses it as `GithubAuthError` for `401` and `403`.
 
 Note that `publish` and `getLatestRun` each take the token as an argument instead of closing over
 it. The token comes from the signed-in user's profile, not from adapter config, so it isn't known
@@ -427,6 +433,26 @@ a remount or a window focus.
 Matching by dispatch time is a heuristic. Two publishes inside the tolerance window and the
 drawer follows the wrong one — it will still be a dispatch of the right workflow, so the failure
 is cosmetic.
+
+**A failed dispatch is a state the button reports, not an exception that vanishes.** Until 1.9.0
+it did vanish: `usePublishButton` ran `adapter.publish()` through `useMutation` and returned
+neither `isError` nor `error`, so react-query caught the rejection and nothing read it — and
+because `isPending` returns to `false` on failure exactly as it does on success, the label fell
+back to `Publish` and a refused token looked like a working press. The hook now returns `error`
+and `reset`, the label carries `Publish failed`, and `PublishStatusModal` is handed the rejection
+as a prop to render above the run rows. The prop is not an oversight: react-query's `mutationKey`
+does not share state between observers, so a second `useMutation` in the modal would have its own
+and always read `null` — unlike `usePublishRun`, which three components call and all share
+because queries *do* key on `queryKey`.
+
+The status poll pays for itself twice here. It already calls `getLatestRun` with the same token
+the dispatch will use, so a `PalimpPublishAuthError` from the poll is proof the token is dead
+before anything is pressed: the label reads `Publish token expired` and the button disables
+without a press, in the same shape as `Missing publish token`. The narrowing is what makes this
+safe — a renamed workflow fails the poll too, with a `404`, and that is not a token problem.
+What does not survive is the dispatch failure itself: it is React state, so a reload forgets it,
+because unlike a run's status there is nothing on GitHub to re-read. Design record:
+[plans/editor-safety/01-publish-failure-is-silent.md](plans/editor-safety/01-publish-failure-is-silent.md).
 
 ## Sessions and false positives
 

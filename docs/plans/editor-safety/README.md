@@ -1,7 +1,9 @@
 # Editor safety — the plan set
 
-**Status:** all three plans written, **none built** · **Written:** 2026-10-06, against 1.8.1
-(`b2934c7`) · **Branch:** not started
+**Status:** all three plans written; **01 built** (1.9.0, 2026-10-08), 02 and 03 not ·
+**Written:** 2026-10-06, against 1.8.1 (`b2934c7`) · **Branch:** docs on
+`t3code/publish-failure-silent-surfacing`, 01 on `t3code/01-publish-failure-is-silent` off it —
+neither pushed
 
 Three ways the editor loses an owner's work or lies to them about it, all reported by the first
 non-example host and all written up before any of them was built. Unlike
@@ -46,7 +48,7 @@ ones gate the phase they name and must be answered in writing before that phase 
 | E3 | Does an empty string mean "absent"? | **No** (2026-10-06) | An intentionally empty string has to stay representable; inferring intent from the value is how it stops being. Reset is an explicit action the editor chooses, not a reading of `""`. This is the host's ADR 039 rejection, and it stands |
 | E4 | Where does undo's previous value live? | **One reserved key `__palimp.undo`** (2026-10-06), filtered out of `loadMessages()` in both server adapters | A `prev.<key>` row per key doubles the set `loadMessages()` fetches whole into every build, and every page's payload with it. One row is bounded by the batch, not by history |
 | E5 | Order | **02 before 03** (2026-10-06); 01 independent | Undoing the first-ever edit to a string means removing a row. Without `removeKeys` the best available is writing the `defaultMessage` as a literal row, which looks identical today and pins the copy tomorrow |
-| E6 | Version | **1.9.0** (2026-10-06) | Additive across all three: a new exported error class, a widened hook return, an optional interface member, a reserved key prefix. No existing behaviour changes meaning |
+| E6 | Version | **1.9.0** (2026-10-06) | Additive across all three: a new exported error class, a widened hook return, an optional interface member, a reserved key prefix. No existing behaviour changes meaning. **Cut by 01 on 2026-10-08** — 02 and 03 now land inside a version that already exists, or bump again if either ships separately |
 | E7 | **Does Reset reach keys with no editor on the page?** | **open** — gates 02 | 02 enumerates mounted and registered keys, which is the set a page can offer. But its own report names the orphaned key — typed into a question the host later deleted, invisible and unremovable — and that key is in no store. Answering "mounted only" is coherent and leaves the reported case unfixed; answering "all stored keys" needs an adapter `listKeys` the interface does not have. Decide before building the modal |
 | E8 | **Who runs the Supabase SQL on an existing project?** | **open** — gates 02 shipping to the host | `grant delete` and a delete policy are a manual step against a live, client-owned database. Until it runs, Reset fails with `42501` and looks like a bug in the feature. Whether that is a release-note instruction, a documented migration file, or a check the drawer performs is undecided |
 
@@ -54,16 +56,24 @@ ones gate the phase they name and must be answered in writing before that phase 
 
 | # | plan | status |
 | --- | --- | --- |
-| 01 | [01-publish-failure-is-silent.md](01-publish-failure-is-silent.md) — the dispatch error nothing reads | **not built.** Independent; the one with a production incident behind it (host, 2026-09-28) |
+| 01 | [01-publish-failure-is-silent.md](01-publish-failure-is-silent.md) — the dispatch error nothing reads | **built, 2026-10-08, as 1.9.0.** Both halves as written. Eight divergence notes at the bottom of the plan; the load-bearing one is that the auth error class had to split — a generic `PalimpPublishAuthError` in `core`, `GithubAuthError` subclassing it in the adapter — because `instanceof` in the drawer would otherwise invert the dependency direction. **All five verification steps are unrun** (no live host, no revocable PAT); the 401/403 narrowing was verified directly against the built `dist/` with a stubbed `fetch`, which is the mechanism behind step 4 but not step 4 |
 | 02 | [02-reset-to-original.md](02-reset-to-original.md) — the row palimp cannot remove | **not built.** Gated on E7; needs E8 before it reaches the host |
 | 03 | [03-undo-last-save.md](03-undo-last-save.md) — one reserved key, no schema change | **not built.** Needs 02 |
 
 ## Next step
 
-An implementation session for **01**, on a branch off this one. It is self-contained, touches
-`core/admin` and `publish-github` only, and needs neither E7 nor E8 — so it can land while those
-are being answered. Its verification is a live host with a deliberately revoked PAT; `pnpm
-check-types` and `pnpm build` see none of it.
+**01 is built and 1.9.0 is cut.** Two things it still owes, neither of them library work:
+
+1. **Run §Verification against a live host** — a revoked PAT and a renamed workflow. Read
+   [divergence 2](01-publish-failure-is-silent.md#divergence-notes) first: steps 1 and 2 as
+   written cannot both be observed, because the mount-time poll disables the button before a
+   press, and a revised step 1 should rename the workflow rather than revoke the token.
+2. **Revendor 1.9.0 into `nano-pro-web`** by that repo's `agent-guidelines/revendoring-palimp.md`,
+   and shorten `agent-guidelines/editing-copy.md` §3 — the paragraph that teaches the client to
+   check the status panel by hand exists because of this bug.
+
+Then **answer E7 and E8 in writing**, which is what unblocks 02; 03 follows 02. Neither decision
+is affected by anything 01 landed — 01 touched no adapter interface.
 
 ## Where these came from
 
