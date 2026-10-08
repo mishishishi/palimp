@@ -1,9 +1,9 @@
 # Editor safety — the plan set
 
 **Status:** all three plans written; **01 built** (1.9.0, 2026-10-08), 02 and 03 not ·
-**Written:** 2026-10-06, against 1.8.1 (`b2934c7`) · **Branch:** docs on
-`t3code/publish-failure-silent-surfacing`, 01 on `t3code/01-publish-failure-is-silent` off it —
-neither pushed
+**Written:** 2026-10-06, against 1.8.1 (`b2934c7`) · **Branch:**
+`pr/10-publish-failure-is-silent`, stacked on `pr/09-publish-status-staleness` — docs commit and
+01 both on it, not pushed
 
 Three ways the editor loses an owner's work or lies to them about it, all reported by the first
 non-example host and all written up before any of them was built. Unlike

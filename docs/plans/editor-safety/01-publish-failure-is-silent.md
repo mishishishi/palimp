@@ -192,8 +192,8 @@ the status panel by hand **because** of this bug. When this lands, that paragrap
 ## Landing note
 
 Built 2026-10-08 as `@palimp/core` / `@palimp/publish-github` **1.9.0**, on
-`t3code/01-publish-failure-is-silent` off the branch carrying this folder's docs commit. Not
-pushed, no PR.
+`pr/10-publish-failure-is-silent` — stacked on `pr/09-publish-status-staleness`, carrying this
+folder's docs commit beneath the feature commit. Not pushed, no PR.
 
 Both halves landed as written: the dispatch error is returned and read, and the status poll's
 auth failure disables the button before a press. Four files changed in `libs/core`
