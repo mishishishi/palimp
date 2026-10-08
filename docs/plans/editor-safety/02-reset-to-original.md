@@ -31,7 +31,7 @@ affordance, that the editor has to choose.
 
 **It is not version history.** Resetting goes to the *dictionary default*, not to the previous
 value. One step back from "I cleared it" to "as the developer wrote it". The previous value is
-[03-undo-last-save.md](03-undo-last-save.md), and the two are deliberately separate: this one can
+[04-undo-last-save.md](04-undo-last-save.md), and the two are deliberately separate: this one can
 restore a string nobody has a copy of, and that one can restore a string the dictionary has never
 seen.
 
