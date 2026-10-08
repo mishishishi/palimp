@@ -1,5 +1,5 @@
 import { createServerAdapter } from "@palimp/be-firebase/server";
-import { palimp, setBackendAdapter } from "@palimp/fe-next";
+import { collection, palimp, setBackendAdapter } from "@palimp/fe-next";
 
 // The registration lives here, not in the layout body. Next does not guarantee
 // the layout module is evaluated before a page's generateMetadata, and a page
@@ -13,4 +13,4 @@ setBackendAdapter(
   }),
 );
 
-export { palimp };
+export { collection, palimp };

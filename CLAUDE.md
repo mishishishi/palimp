@@ -3,7 +3,7 @@
 Guidance for agents working in this repo.
 
 Read [docs/architecture.md](docs/architecture.md) before changing anything in `libs/`. It explains
-the four contracts, why `hasSession()` is synchronous, why writes are batched, and what the static
+the five seams, why `hasSession()` is synchronous, why writes are batched, and what the static
 export premise implies. Most non-obvious code here is non-obvious for a reason documented there.
 
 ## Commands

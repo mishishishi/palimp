@@ -1,5 +1,11 @@
-import { PalimpFields } from "@palimp/fe-next";
+import {
+  collectionItemKey,
+  PalimpCollectionList,
+  PalimpFields,
+} from "@palimp/fe-next";
 import { type Metadata } from "next";
+import { varieties, varietyBodies } from "./collections.ts";
+import { VarietyCard } from "./VarietyCard.tsx";
 import {
   FixtureAnchor,
   FixtureForm,
@@ -8,7 +14,7 @@ import {
   FixtureNativeMousedown,
   FixtureSummary,
 } from "./GuardFixtures.tsx";
-import { palimp } from "./palimp.ts";
+import { collection, palimp } from "./palimp.ts";
 import { asString, seoFields } from "./seo.ts";
 
 export const generateMetadata = async (): Promise<Metadata> => {
@@ -23,6 +29,7 @@ export const generateMetadata = async (): Promise<Metadata> => {
 
 export default async function Page() {
   const { p } = await palimp();
+  const items = await collection(varieties);
 
   return (
     <main style={styles.page}>
@@ -82,39 +89,32 @@ export default async function Page() {
           {p("varieties.title", { defaultMessage: "What we grow" })}
         </h2>
         <div style={styles.cards}>
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>
-              {p("varieties.one.name", { defaultMessage: "Gros Michel" })}
-            </h3>
-            <p style={styles.cardBody}>
-              {p("varieties.one.body", {
-                defaultMessage:
-                  "The pre-1950s 'original' banana. Creamier, sweeter, and more aromatic than what you'll find at the supermarket.",
-              })}
-            </p>
-          </div>
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>
-              {p("varieties.two.name", { defaultMessage: "Manzano" })}
-            </h3>
-            <p style={styles.cardBody}>
-              {p("varieties.two.body", {
-                defaultMessage:
-                  "Small, firm, and faintly apple-flavoured. A favourite of local bakers and cocktail bars.",
-              })}
-            </p>
-          </div>
-          <div style={styles.card}>
-            <h3 style={styles.cardTitle}>
-              {p("varieties.three.name", { defaultMessage: "Red Dacca" })}
-            </h3>
-            <p style={styles.cardBody}>
-              {p("varieties.three.body", {
-                defaultMessage:
-                  "Dense, raspberry-tinted flesh under a deep maroon skin. Wonderful grilled or eaten ripe with sharp cheese.",
-              })}
-            </p>
-          </div>
+          {/*
+            The children are the baked fragment — what visitors get, mapped on
+            the server where p() can resolve each body against the stored
+            rows. For an admin the wrapper swaps them for a live map of the
+            same card, so a structural change appears before any Publish. The
+            wrapper is also the registrar: no separate <PalimpCollections>.
+          */}
+          <PalimpCollectionList collection={varieties} itemComponent={VarietyCard}>
+            {items.map((v) => {
+              // Hoisted because element-access narrowing needs a const key:
+              // noUncheckedIndexedAccess makes the lookup string | undefined,
+              // and the spread is the exactOptionalPropertyTypes house pattern.
+              const body = varietyBodies[v.id];
+
+              return (
+                <VarietyCard
+                  key={v.id}
+                  item={v}
+                  staleBody={p(collectionItemKey(varieties, v.id, "body"), {
+                    ...(body ? { defaultMessage: body } : {}),
+                    asString: true,
+                  })}
+                />
+              );
+            })}
+          </PalimpCollectionList>
         </div>
       </section>
 
@@ -293,23 +293,6 @@ const styles = {
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "1.25rem",
     marginTop: "1.5rem",
-  },
-  card: {
-    background: "#fff8d6",
-    border: "1px solid #ecdf8c",
-    borderRadius: "10px",
-    padding: "1.25rem 1.25rem 1.5rem",
-  },
-  cardTitle: {
-    margin: "0 0 0.5rem",
-    fontSize: "1.15rem",
-    fontWeight: 700,
-  },
-  cardBody: {
-    margin: 0,
-    fontSize: "0.97rem",
-    lineHeight: 1.55,
-    color: "#4a4a30",
   },
   details: {
     marginTop: "1.5rem",
