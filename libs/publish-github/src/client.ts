@@ -11,6 +11,11 @@ export interface GithubPublishOptions {
   workflow: string;
   ref?: string;
   inputs?: Record<string, string>;
+  /** Report any run of the workflow as the latest publish, not only dispatched
+   *  ones. For hosts whose publish target also runs on `push`, where filtering
+   *  makes the drawer name an older run as "latest". `findRunSince` always
+   *  filters — matching a dispatch by timestamp needs the narrower list. */
+  followAllEvents?: boolean;
 }
 
 interface GithubRun {
@@ -27,8 +32,14 @@ const githubHeaders = (token: string) => ({
   "X-GitHub-Api-Version": "2022-11-28",
 });
 
-const runsUrl = (opts: GithubPublishOptions, perPage: number) =>
-  `https://api.github.com/repos/${opts.owner}/${opts.repo}/actions/workflows/${opts.workflow}/runs?event=workflow_dispatch&per_page=${perPage}`;
+const runsUrl = (
+  opts: GithubPublishOptions,
+  perPage: number,
+  allEvents: boolean,
+) =>
+  `https://api.github.com/repos/${opts.owner}/${opts.repo}/actions/workflows/${opts.workflow}/runs?${
+    allEvents ? "" : "event=workflow_dispatch&"
+  }per_page=${perPage}`;
 
 const mapStatus = (s: string | null): PublishRunStatus => {
   switch (s) {
@@ -108,9 +119,16 @@ const fetchRuns = async (
   token: string,
   opts: GithubPublishOptions,
   perPage: number,
+  allEvents = false,
 ): Promise<GithubRun[]> => {
-  const res = await fetch(runsUrl(opts, perPage), {
+  // `cache: "no-store"` is load-bearing. api.github.com answers this GET with
+  // `cache-control: private, max-age=60`, so a default-cache fetch lets the
+  // browser satisfy the 10 s poll loop from its own copy for up to a minute —
+  // stale status and stale run id, with no request to notice. The cost is the
+  // conditional-request rate-limit exemption: every poll now counts.
+  const res = await fetch(runsUrl(opts, perPage, allEvents), {
     headers: githubHeaders(token),
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(`GitHub get runs failed: ${res.status} ${res.statusText}`);
@@ -145,7 +163,7 @@ export const createGithubPublishAdapter = (
     return mapRun(run);
   },
   getLatestRun: async (token: string) => {
-    const runs = await fetchRuns(token, opts, 1);
+    const runs = await fetchRuns(token, opts, 1, opts.followAllEvents ?? false);
     const run = runs[0];
     return run ? mapRun(run) : null;
   },

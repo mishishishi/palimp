@@ -15,7 +15,14 @@ export const PalimpGithubPublishProvider = ({ children, ...opts }: Props) => {
 
   const adapter = useMemo(
     () => createGithubPublishAdapter(opts),
-    [opts.owner, opts.repo, opts.workflow, opts.ref, opts.inputs],
+    [
+      opts.owner,
+      opts.repo,
+      opts.workflow,
+      opts.ref,
+      opts.inputs,
+      opts.followAllEvents,
+    ],
   );
 
   return (

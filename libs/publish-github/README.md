@@ -44,10 +44,17 @@ interface GithubPublishOptions {
   workflow: string;                  // filename ("deploy.yml") or numeric workflow id
   ref?: string;                      // branch to dispatch against; defaults to "main"
   inputs?: Record<string, string>;   // workflow_dispatch inputs
+  followAllEvents?: boolean;         // report push-triggered runs too; default false
 }
 ```
 
 The target workflow must declare `workflow_dispatch:` in its `on:` block, or the dispatch 404s.
+
+`followAllEvents` drops the `event=workflow_dispatch` filter from `getLatestRun`. Set it when
+your publish target also runs on `push` and you would rather the drawer name the newest run of
+the workflow — whatever started it — than the newest *dispatched* one, which may be older and
+already completed. See the first quirk below for the trade. `publish()` is unaffected: its
+dispatch-matching heuristic always queries the filtered list.
 
 Note there is no `token` here. The token is the signed-in user's, read from their profile and
 passed per call — see below.
@@ -90,6 +97,12 @@ workflow, so the consequence is a misleading status, not a broken publish.
 is newest. Nothing is stored client-side — GitHub is the record — which is exactly why state
 survives a page reload: the query just refetches on mount.
 
+**3. The runs list is HTTP-cacheable, and the browser will cache it.** api.github.com answers
+the GET with `cache-control: private, max-age=60`. A default-cache `fetch` therefore lets the
+browser serve the 10 s poll loop out of its own copy for up to a minute — stale status *and*
+stale run id, with no request made to notice. Both queries send `cache: "no-store"` for that
+reason. The cost is in the rate-limit quirk below.
+
 Because no id is tracked, "latest run" means latest *by recency*, and it can be a run this
 adapter never dispatched. See the caveat below.
 
@@ -118,9 +131,9 @@ consumers.
 
 ## Quirks
 
-**Only `workflow_dispatch` runs are visible.** Both queries filter on
-`event=workflow_dispatch`, so the drawer reports only runs Palimp could have started. It ignores
-push- and PR-triggered runs of the same workflow.
+**Only `workflow_dispatch` runs are visible, unless you opt out.** Both queries filter on
+`event=workflow_dispatch` by default, so the drawer reports only runs Palimp could have started.
+It ignores push- and PR-triggered runs of the same workflow.
 
 That filter is load-bearing in this repo, because the deploy workflows double as the publish
 target ([deploy-supabase.yml](../../.github/workflows/deploy-supabase.yml) sets
@@ -130,16 +143,33 @@ the Publish button while it ran.
 
 The flip side: a push-triggered deploy genuinely does republish the site, and the drawer won't
 show it. "Latest publish" means "latest publish *dispatched from here*", not "latest deploy".
+Worse, if the newest dispatched run is older than the push run in flight, the modal names a
+completed run while a deploy is still going — which reads as a stale status rather than a
+filtered one.
 
-**Rate limits are not handled.** `getLatestRun` polls every 10 s while a run is unfinished, on
-top of react-query's refetch-on-focus. Well inside GitHub's 5 000 requests/hour for an
-authenticated PAT, but there is no backoff and a 403 surfaces as a generic
-`GitHub get runs failed: 403`.
+`followAllEvents: true` is the escape hatch for a host in that position: `getLatestRun` then
+reports the newest run whatever triggered it. Take it only if the Publish button being disabled
+during an unrelated push build is acceptable — that is the behaviour the filter was protecting
+in this repo. `findRunSince` keeps filtering either way; its `created_at` heuristic gets strictly
+worse against a list that includes push runs.
+
+**Rate limits are not handled, and every poll now counts.** `getLatestRun` polls every 10 s
+while a run is unfinished and every 60 s while it is not — the idle poll exists so a run started
+in another tab, by another admin, or by a push is noticed at all. On top of that is
+react-query's refetch-on-focus.
+
+`cache: "no-store"` forgoes the conditional-request exemption, under which a `304` would not
+have been billed against the quota. So the worst case is now ~360 requests/hour per admin with
+the drawer open on an unfinished run, ~60/hour idle, against GitHub's 5 000/hour for an
+authenticated PAT. Still comfortable for a handful of admins, but it is no longer free. There is
+no backoff, and a 403 surfaces as a generic `GitHub get runs failed: 403`.
 
 **No provider means a silent no-op.** `PalimpPublishContext` in `core` holds `null` under a
 non-nullable type. If a user has a `publishToken` but this provider isn't mounted, the Publish
 button renders enabled and clicking does nothing.
 
 **`inputs` is in the memo deps by identity.** `PalimpGithubPublishProvider` memoizes on
-`[owner, repo, workflow, ref, inputs]`; an inline object literal for `inputs` is a new reference
-each render, so the adapter is rebuilt every time. Hoist it to a module constant.
+`[owner, repo, workflow, ref, inputs, followAllEvents]`; an inline object literal for `inputs` is
+a new reference each render, so the adapter is rebuilt every time. Hoist it to a module constant.
+Any new field on `GithubPublishOptions` has to join that list — it is a hand-written dep array
+with no lint rule watching it.
