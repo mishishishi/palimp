@@ -348,3 +348,45 @@ provider means a silent no-op … the Publish button renders enabled and clickin
 which has been untrue since `available` was added — the drawer disables it and says "No publish
 provider". It predates this plan and is not in its scope. The neighbouring sentence about `403`
 *was* corrected, because this change is what made it wrong.
+
+---
+
+## Verification run — 2026-10-08, live host
+
+**This section supersedes §What could not be run, and why.** That list was written when there was
+no host and no revocable credential; both appeared later the same day. All five steps have now been
+run against `examples/supabase-next` with real Supabase credentials, a real fine-grained PAT on
+`mishishishi/palimp`, and the drawer driven over CDP. The example is a sufficient host: its
+`app/layout.tsx` wires `PalimpGithubPublishProvider`, so nothing about the publish seam is stubbed.
+
+| step | result |
+| --- | --- |
+| 1 — revoke the PAT, press Publish, expect `Publish failed` | **unreachable as written, and now proven so** — see below. Covered by the revised step 1 in [divergence 2](#divergence-notes), which is step 4 |
+| 2 — dead token disables the button with no press | **pass.** `Publish token expired`, disabled, after a reload and no interaction. The status icon is disabled with it, which is `disabled={!run && !isPending && !error}` behaving correctly when the poll itself is what failed |
+| 3 — valid token dispatches a real run | **pass.** `Publish` → `Dispatching...` → `Publishing...` → `Publish`, and the modal tracked run `37804085660` from `in_progress` to `success` without a reload. Confirmed independently against the GitHub API |
+| 4 — renamed workflow reads `Publish failed`, not `Publish token expired` | **pass, and this is the one that mattered.** With `NEXT_PUBLIC_GITHUB_WORKFLOW` pointed at a file that does not exist: the mount poll 404s and the label stays `Publish`; pressing it gives `Publish failed` with the button still enabled; the modal reads `Dispatch failed` / `GitHub dispatch failed: 404` and the **generic** cause string, not the auth one |
+| 5 — saved edits survive | **pass.** An edit to `hero.eyebrow` saved, then carried through a 404 dispatch failure, a dev-server restart, a reload and the expired-token state. Saved again while the drawer read `Publish token expired`, which is the same assertion from the other side |
+
+### Three things the run corrected
+
+**1. Divergence 2's timing was wrong, and its conclusion is stronger than it claimed.** The note
+said a dead token disables the button "in under a second". It takes about **seven**: react-query
+retries the `401` with backoff before `error` is set, and throughout that window the label reads
+`Publish` **disabled** — `isLoading` is still true. So there is no moment at which a dead token
+leaves a pressable Publish button. The plan's step 1 is not racy, it is unreachable, and the
+recommendation to rename the workflow instead stands unchanged.
+
+**2. A 404 from the poll also disables the button for its retry window** — same `isLoading`, same
+~2 s on a non-retried path. Harmless, and worth knowing before someone reports it: an editor who
+opens the drawer and presses immediately meets a dead button with no explanation. If that is ever
+worth fixing, `isLoading` is the wrong gate and `isPending && !isError` is the right one.
+
+**3. `statusText` is empty over HTTP/2**, so the message renders as `GitHub dispatch failed: 404 `
+with a trailing space rather than `404 Not Found`. Cosmetic, and only visible because this plan is
+what put that string in front of an editor.
+
+### Not covered by this run
+
+The host's own `check-eager-chunks` gate, which is `nano-pro-web`'s and runs at revendoring time.
+By inspection it passes: the only new eagerly-reachable code is a bare `Error` subclass in
+`publish-github/src/client.ts`, a module that package already imports.

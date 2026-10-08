@@ -69,19 +69,19 @@ ones gate the phase they name and must be answered in writing before that phase 
 
 | # | plan | status |
 | --- | --- | --- |
-| 01 | [01-publish-failure-is-silent.md](01-publish-failure-is-silent.md) — the dispatch error nothing reads | **built, 2026-10-08, as 1.9.0.** Both halves as written. Eight divergence notes at the bottom of the plan; the load-bearing one is that the auth error class had to split — a generic `PalimpPublishAuthError` in `core`, `GithubAuthError` subclassing it in the adapter — because `instanceof` in the drawer would otherwise invert the dependency direction. **All five verification steps are unrun** (no live host, no revocable PAT); the 401/403 narrowing was verified directly against the built `dist/` with a stubbed `fetch`, which is the mechanism behind step 4 but not step 4 |
+| 01 | [01-publish-failure-is-silent.md](01-publish-failure-is-silent.md) — the dispatch error nothing reads | **built, 2026-10-08, as 1.9.0.** Both halves as written. Eight divergence notes at the bottom of the plan; the load-bearing one is that the auth error class had to split — a generic `PalimpPublishAuthError` in `core`, `GithubAuthError` subclassing it in the adapter — because `instanceof` in the drawer would otherwise invert the dependency direction. **Verified against a live host on 2026-10-08** — `examples/supabase-next`, real Supabase credentials, a real PAT on `mishishishi/palimp`, the drawer driven over CDP. Steps 2–5 pass, including the one that proves the narrowing: a renamed workflow reads `Publish failed` with a 404, not `Publish token expired`. Step 1 is unreachable as written and now proven so. See §Verification run at the bottom of the plan |
 | 02 | [02-reset-to-original.md](02-reset-to-original.md) — the row palimp cannot remove | **not built, and next.** E8 answered 2026-10-08: the drawer probes for the delete grant, and a migration file ships beside it. E7 parked behind E10, so the only call left is Reset's key scope |
 | 03 | [03-discard-unpublished.md](03-discard-unpublished.md) — back to the live build | **not built.** Written 2026-10-08, after 01. Gated on E9, E10, E11; needs 02's `removeKeys` |
 | 04 | [04-undo-last-save.md](04-undo-last-save.md) — one reserved key, no schema change | **not built.** Needs 02. Was 03 until 2026-10-08 |
 
 ## Next step
 
-**01 is built and 1.9.0 is cut.** Two things it still owes, neither of them library work:
+**01 is built, verified and 1.9.0 is cut.** One thing it still owes, and it is not library work:
 
-1. **Run §Verification against a live host** — a revoked PAT and a renamed workflow. Read
-   [divergence 2](01-publish-failure-is-silent.md#divergence-notes) first: steps 1 and 2 as
-   written cannot both be observed, because the mount-time poll disables the button before a
-   press, and a revised step 1 should rename the workflow rather than revoke the token.
+1. ~~Run §Verification against a live host.~~ **Done 2026-10-08** — steps 2–5 pass, step 1 is
+   unreachable as written. The run also corrected divergence 2's timing: a dead token takes about
+   seven seconds to disable the button, not one, because react-query retries the `401` first, and
+   the button is disabled throughout. Recorded in the plan's §Verification run.
 2. **Revendor 1.9.0 into `nano-pro-web`** by that repo's `agent-guidelines/revendoring-palimp.md`,
    and shorten `agent-guidelines/editing-copy.md` §3 — the paragraph that teaches the client to
    check the status panel by hand exists because of this bug.
