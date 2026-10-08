@@ -1,9 +1,31 @@
+import { PalimpPublishAuthError } from "@palimp/core";
 import type {
   PalimpPublishAdapter,
   PalimpPublishRun,
   PublishRunConclusion,
   PublishRunStatus,
 } from "@palimp/core";
+
+/** GitHub refused the token: `401` (revoked, malformed, expired) or `403`
+ *  (valid token, no rights on the repo or the workflow). Only those two —
+ *  a `404` from a renamed workflow and a `429` from rate limiting stay plain
+ *  `Error`s, because the remedy is not a new token.
+ *
+ *  Exported so a host can produce it too, and subclassed off
+ *  `PalimpPublishAuthError` so the drawer narrows without importing this
+ *  package. Matching on the message string was the alternative and is the
+ *  wrong contract. */
+export class GithubAuthError extends PalimpPublishAuthError {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "GithubAuthError";
+    this.status = status;
+  }
+}
+
+const isAuthStatus = (status: number) => status === 401 || status === 403;
 
 export interface GithubPublishOptions {
   owner: string;
@@ -110,7 +132,10 @@ const dispatchWorkflow = async (
     },
   );
   if (!res.ok) {
-    throw new Error(`GitHub dispatch failed: ${res.status} ${res.statusText}`);
+    const message = `GitHub dispatch failed: ${res.status} ${res.statusText}`;
+    throw isAuthStatus(res.status)
+      ? new GithubAuthError(message, res.status)
+      : new Error(message);
   }
   return dispatchedAt;
 };
@@ -131,7 +156,10 @@ const fetchRuns = async (
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new Error(`GitHub get runs failed: ${res.status} ${res.statusText}`);
+    const message = `GitHub get runs failed: ${res.status} ${res.statusText}`;
+    throw isAuthStatus(res.status)
+      ? new GithubAuthError(message, res.status)
+      : new Error(message);
   }
   const json = (await res.json()) as { workflow_runs?: GithubRun[] };
   return json.workflow_runs ?? [];

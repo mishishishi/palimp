@@ -14,7 +14,7 @@ the rebuild. On a server-rendered host this package would have nothing to do.
 
 ## Entry points
 
-- `@palimp/publish-github/client` — `createGithubPublishAdapter(opts)`
+- `@palimp/publish-github/client` — `createGithubPublishAdapter(opts)`, `GithubAuthError`
 - `@palimp/publish-github/react` — `<PalimpGithubPublishProvider owner repo workflow …>`
 
 No runtime dependencies; it is `fetch` and about 150 lines.
@@ -162,7 +162,26 @@ react-query's refetch-on-focus.
 have been billed against the quota. So the worst case is now ~360 requests/hour per admin with
 the drawer open on an unfinished run, ~60/hour idle, against GitHub's 5 000/hour for an
 authenticated PAT. Still comfortable for a handful of admins, but it is no longer free. There is
-no backoff, and a 403 surfaces as a generic `GitHub get runs failed: 403`.
+no backoff. A `403` surfaces as a `GithubAuthError`, which the drawer reads as an expired token
+and which a secondary-rate-limit `403` would therefore mislabel — see the quirk below.
+
+**`GithubAuthError` is `401`/`403` only, and `403` is not only auth.** Both `dispatchWorkflow`
+and `fetchRuns` throw `GithubAuthError extends PalimpPublishAuthError` (from `@palimp/core`) for
+those two statuses and a plain `Error` for everything else, which is what lets the drawer say
+`Publish token expired` for a revoked PAT and `Publish failed` for a renamed workflow's `404`.
+The `.status` is on the error if a consumer wants it.
+
+The known-wrong edge is that GitHub also answers `403` for a **secondary rate limit** and for a
+repository with Actions disabled. Neither is fixed by a new token, and both will read as
+`Publish token expired`. Narrowing further means parsing the response body for GitHub's
+`message` — which is the string-matching contract this class exists to avoid — so the mislabel
+is accepted. A `429`, the primary-rate-limit status, stays a plain `Error`.
+
+Subclassing `PalimpPublishAuthError` rather than defining the class here is deliberate: `core`
+holds the base so the drawer can `instanceof` it without importing this package, which would
+invert the dependency direction. `GithubAuthError` stays exported anyway, so a host can produce
+or catch it by name. The check is class identity, so it needs a single resolved copy of
+`@palimp/core` — see [core's quirks](../core/README.md#quirks).
 
 **No provider means a silent no-op.** `PalimpPublishContext` in `core` holds `null` under a
 non-nullable type. If a user has a `publishToken` but this provider isn't mounted, the Publish

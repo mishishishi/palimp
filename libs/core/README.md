@@ -12,8 +12,8 @@ writing an adapter of your own.
 
 Three, and the split matters — see [Quirks](#quirks).
 
-- `@palimp/core` — types, adapter interfaces, the four React contexts, and the collections
-  module re-exported. Cheap; no UI deps pulled in.
+- `@palimp/core` — types, adapter interfaces, the four React contexts,
+  `PalimpPublishAuthError`, and the collections module re-exported. Cheap; no UI deps pulled in.
 - `@palimp/core/collections` — the collections module alone: `defineCollection`,
   `collectionKey`, `parseCollectionDocument`, `serializeCollectionDocument` and their types.
   Pure — no React at all — which is the point: the root entry re-exports the contexts, whose
@@ -56,6 +56,14 @@ interface PalimpMediaAdapter {
   url: (path: string) => string;                 // pure and synchronous
 }
 ```
+
+`PalimpPublishAuthError extends Error` is the one **class** on the publish seam, exported as a
+value. A publish adapter throws it (or a subclass) when the provider refuses the token — GitHub's
+`401`/`403` — and leaves every other failure a plain `Error`. It is generic rather than GitHub's
+own for the same reason the six conclusions are: the drawer narrows on it with `instanceof`, so a
+second publish adapter can report a dead token without any consumer learning what GitHub is. It
+lives in `core` rather than in the adapter because dependencies point inward — `core` cannot
+import a class from a package that imports `core`.
 
 `PalimpMediaAsset` is `{ path, url, size?, contentType? }`. The `image` widget stores the
 **`url`** on the item, not the path — see [Writing a media adapter](#writing-a-media-adapter).
@@ -179,6 +187,18 @@ build-time snapshot the caller passed in. Under `preview` it renders as plain te
 The left-edge drawer: Save (with a pending count), preview toggle, a **Fields** button opening the
 modal of off-page fields, Publish plus a status icon and detail modal, and the signed-in user with
 a logout button. Mounted by `PalimpProvider` when `admin` is true.
+
+The Publish button's label is the whole of its error reporting, and it has six states:
+`No publish provider` and `Missing publish token` (no adapter / no token on the profile, both
+disabled), `Publish token expired` (the 60 s status poll got a `PalimpPublishAuthError`, disabled
+**without a press** — see [Quirks](#quirks)), `Publish failed` (the dispatch rejected; the button
+stays **enabled**, because the same button is the retry), then `Dispatching...`, `Publishing...`
+and `Publish`. `usePublishButton` returns `error` and `reset` alongside `available` and
+`hasToken`; `onClick` calls `reset()` before `mutate()` so a retry does not leave a stale message
+beside a running dispatch. `PublishStatusModal` takes the dispatch rejection as a
+`dispatchError` prop and renders it above the run rows, with a plain-language cause — separate
+wording from its `Couldn't load run status.`, because that one means the run cannot be *seen* and
+this one means there is *no run*.
 
 `DevtoolsProvider` calls `getUser()` to fill the drawer. When that rejects — `hasSession()` reads
 an unvalidated cookie or flag, so it can report a session the server has already dropped — the
@@ -330,6 +350,30 @@ is a react-query hook. They are `dependencies`, not peers, so consumers get them
 they use antd themselves. The mitigation is the entry-point split: `fe-next` reaches `./admin`
 only through `next/dynamic`, so visitors never download any of it. Keep it that way — a static
 `import … from "@palimp/core/admin"` anywhere in a render path undoes the whole arrangement.
+
+**A dispatch failure is in React state, so a reload forgets it.** `Publish failed` and the
+modal's `Dispatch failed` block both come off the `useMutation` on `usePublishButton`, which is
+gone on remount. Nothing persists it, because the failed dispatch left nothing on GitHub to
+re-read — unlike a run's status, which `getLatestRun` recovers precisely because the CI provider
+is the store. After a reload the only surviving evidence is `Publish token expired`, and only
+while the cause is a refused token. The plan that added these states weighed and rejected an
+`onError` toast for being *more* transient than this
+([docs/plans/editor-safety/01-publish-failure-is-silent.md](../../docs/plans/editor-safety/01-publish-failure-is-silent.md));
+persisting the failure itself would need somewhere to put it, which is a different plan.
+
+**`PublishStatusModal` is handed the dispatch error rather than reading it.** Calling
+`usePublishButton()` a second time inside the modal looks equivalent and is not: react-query's
+`mutationKey` does not share state between observers, so a second `useMutation` has its own, and
+the modal would always see `null`. Hence the `dispatchError` prop from `DevtoolsContent`. The
+status *query* is the opposite — `usePublishRun()` is called in three places and they all share,
+because queries do key on `queryKey`.
+
+**`instanceof PalimpPublishAuthError` needs exactly one copy of `@palimp/core`.** The drawer's
+`Publish token expired` branch compares against the class identity, so two resolved copies of
+`core` — a host that vendors tarballs into more than one place, a mismatched version between
+`core` and the publish adapter — silently fail the check and the label falls back to
+`Publish failed`. It degrades rather than throws, which also means it will not announce itself.
+The lockstep version across all five packages is what keeps this honest.
 
 **The interaction guard swallows events, page-wide.** While any `EditComponent` is mounted,
 [src/Admin/interactionGuard.ts](src/Admin/interactionGuard.ts) holds capture-phase listeners on
