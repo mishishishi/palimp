@@ -390,3 +390,24 @@ what put that string in front of an editor.
 The host's own `check-eager-chunks` gate, which is `nano-pro-web`'s and runs at revendoring time.
 By inspection it passes: the only new eagerly-reachable code is a bare `Error` subclass in
 `publish-github/src/client.ts`, a module that package already imports.
+
+---
+
+## Handover — 2026-10-09
+
+**Supersedes "no tarball was packed" in §What could not be run.** 1.9.0 was packed from `e2a41a1`
+against a clean tree, after `pnpm check-types` and `pack.mjs`'s own assertions passed, and the
+branch is pushed and open as [PR #13](https://github.com/mishishishi/palimp/pull/13) — the §Landing
+note's "Not pushed, no PR" is also stale.
+
+The step-by-step for the host, the checksums, and the five host docs this release makes false are in
+[../../releases/1.9.0-revendor-nano-pro-web.md](../../releases/1.9.0-revendor-nano-pro-web.md).
+Revendoring itself is the host session's job.
+
+One thing that handover had to correct in §Not covered by this run above: `client.ts`'s `Error`
+subclass is **not** in "a module that package already imports" in the sense that matters to the
+host's gate. At 1.8.1 `dist/client.js` had *no* runtime imports at all — only erased type-only ones
+— and 1.9.0 gives it one, `@palimp/core`, for the error base. The conclusion survives, for a
+different reason: `dist/react.js` is the statically imported provider and it already imports both
+`@palimp/core` and `./client` at runtime, so core's root entry was in the eager graph either way.
+Worth knowing before someone reads the new import as the gate moving.

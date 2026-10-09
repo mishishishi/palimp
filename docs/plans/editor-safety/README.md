@@ -4,7 +4,11 @@
 **Written:** 2026-10-06 against 1.8.1 (`b2934c7`), except 03 — 2026-10-08, against 1.9.0 ·
 **Branch:**
 `pr/10-publish-failure-is-silent`, stacked on `pr/09-publish-status-staleness` — docs commit and
-01 both on it, not pushed
+01 both on it; pushed 2026-10-08 and open as
+[PR #13](https://github.com/mishishishi/palimp/pull/13) ·
+**Packed:** 1.9.0 from `e2a41a1`, 2026-10-09 — handover in
+[../../releases/1.9.0-revendor-nano-pro-web.md](../../releases/1.9.0-revendor-nano-pro-web.md),
+revendoring still owed by the host
 
 Ways the editor loses an owner's work or lies to them about it. Unlike
 [collections/](../collections/), this folder arrived nearly complete: 01, 02 and 04 were written in
