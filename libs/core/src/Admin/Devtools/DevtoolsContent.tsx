@@ -29,15 +29,24 @@ export const DevtoolsContent = () => {
 
   const collections = useCollections();
 
+  // Order matters. `tokenExpired` sits with the other two "cannot work" cases
+  // because the poll proves it without a press; `error` sits above `isPending`
+  // because a failure is what the editor needs to read next, and `isPending`
+  // goes back to false on failure exactly as it does on success — which is
+  // what made the broken press indistinguishable from a working one.
   const publishLabel = !publish.available
     ? "No publish provider"
     : !publish.hasToken
       ? "Missing publish token"
-      : publish.isPending
-        ? "Dispatching..."
-        : publish.isRunning
-          ? "Publishing..."
-          : "Publish";
+      : publish.tokenExpired
+        ? "Publish token expired"
+        : publish.error
+          ? "Publish failed"
+          : publish.isPending
+            ? "Dispatching..."
+            : publish.isRunning
+              ? "Publishing..."
+              : "Publish";
 
   return (
     <>
@@ -84,7 +93,10 @@ export const DevtoolsContent = () => {
         <Button
           {...publish.props}
           disabled={
-            publish.props.disabled || !publish.available || !publish.hasToken
+            publish.props.disabled ||
+            !publish.available ||
+            !publish.hasToken ||
+            publish.tokenExpired
           }
           style={{ flex: 1 }}
         >
@@ -93,13 +105,14 @@ export const DevtoolsContent = () => {
         <Button
           icon={<PublishStatusIcon run={run} isPending={publish.isPending} />}
           onClick={() => setModalOpen(true)}
-          disabled={!run && !publish.isPending}
+          disabled={!run && !publish.isPending && !publish.error}
         />
       </Space.Compact>
 
       <PublishStatusModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
+        dispatchError={publish.error}
       />
 
       <Divider

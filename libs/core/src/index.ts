@@ -44,6 +44,7 @@ export type {
   PublishRunStatus,
   PublishRunConclusion,
 } from "./PalimpPublishAdapter.ts";
+export { PalimpPublishAuthError } from "./PalimpPublishAdapter.ts";
 export type {
   PalimpMediaAdapter,
   PalimpMediaAsset,
