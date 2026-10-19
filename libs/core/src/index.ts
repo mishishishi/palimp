@@ -36,6 +36,7 @@ export { PalimpGeneralContext } from "./PalimpGeneralContext.ts";
 export { PalimpClientBackendContext } from "./PalimpClientBackendContext.ts";
 export { PalimpPublishContext } from "./PalimpPublishContext.ts";
 export { PalimpMediaContext } from "./PalimpMediaContext.ts";
+export { PalimpDrawerActionsContext } from "./PalimpDrawerActionsContext.ts";
 
 export type { PalimpClientBackendAdapter } from "./PalimpClientBackendAdapter.ts";
 export type {
@@ -49,3 +50,7 @@ export type {
   PalimpMediaAdapter,
   PalimpMediaAsset,
 } from "./PalimpMediaAdapter.ts";
+export type {
+  PalimpDrawerAction,
+  PalimpDrawerActionResult,
+} from "./PalimpDrawerAction.ts";

@@ -38,11 +38,12 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
 
 /** Plain-language cause, under the status line. The dispatch and the status
  *  query must not share wording: "couldn't load run status" means the run
- *  cannot be seen, and this means there is no run. */
-const dispatchCause = (error: Error) =>
+ *  cannot be seen, and this means there is no run. `button` names the retry,
+ *  so a drawer action's failure points at its own button, not at Publish. */
+export const dispatchCause = (error: Error, button = "Publish") =>
   error instanceof PalimpPublishAuthError
     ? "The publish token on your account was refused. A new token is needed; your saved changes are not affected."
-    : "The site was not rebuilt. Your saved changes are not affected — fixing the cause and pressing Publish again is the retry.";
+    : `The site was not rebuilt. Your saved changes are not affected — fixing the cause and pressing ${button} again is the retry.`;
 
 export const PublishStatusModal = ({
   open,

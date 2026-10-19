@@ -15,7 +15,8 @@ the rebuild. On a server-rendered host this package would have nothing to do.
 ## Entry points
 
 - `@palimp/publish-github/client` — `createGithubPublishAdapter(opts)`, `GithubAuthError`
-- `@palimp/publish-github/react` — `<PalimpGithubPublishProvider owner repo workflow …>`
+- `@palimp/publish-github/react` — `<PalimpGithubPublishProvider owner repo workflow …>`, with
+  an optional `extraTargets` prop, and the `GithubExtraTarget` type
 
 No runtime dependencies; it is `fetch` and about 150 lines.
 
@@ -58,6 +59,58 @@ dispatch-matching heuristic always queries the filtered list.
 
 Note there is no `token` here. The token is the signed-in user's, read from their profile and
 passed per call — see below.
+
+## Extra targets
+
+A second workflow on the same repo, dispatched by its own button in the drawer, below Publish —
+the case it was built for is a preview site whose drawer also rebuilds the live one:
+
+```tsx
+<PalimpGithubPublishProvider
+  owner="acme"
+  repo="site"
+  workflow="preview.yml"
+  extraTargets={[
+    {
+      id: "production",
+      label: "Publish live site",
+      workflow: "production.yml",
+      confirm: {
+        title: "Publish the live site?",
+        content: "The public site rebuilds from the saved content.",
+        okText: "Publish live site",
+      },
+    },
+  ]}
+>
+```
+
+```ts
+interface GithubExtraTarget {
+  id: string;                       // unique across every drawer action in the tree
+  label: string;
+  workflow: string;
+  confirm?: { title: string; content: string; okText?: string };
+  ref?: string;                     // defaults to the provider's ref, then "main"
+  inputs?: Record<string, string>;  // not inherited from the provider
+}
+```
+
+**It is plain data, and that is the point.** A Next.js host configures palimp from its layout, a
+Server Component, and a function cannot cross into a client one — so a `PalimpDrawerAction`
+from `@palimp/core`, whose `run` is a callback, cannot be passed from there. The provider is the
+client side of that boundary: it turns each entry into a drawer action with
+`needsPublishToken: true` whose `run` calls `createGithubPublishAdapter(…).publish(token)` on the
+target's workflow and reports `Run <id> started`, linked to the run. The labels and the confirm
+are the host's strings, in the host's language.
+
+An extra target **dispatches and never polls** — no status icon, no modal, no "running" state
+after the dispatch resolves. Hence no `followAllEvents`: it would mean nothing. `inputs` is not
+inherited because a different workflow can reject inputs it does not declare; `ref` is, because
+it is the same repo.
+
+The provider concatenates its actions with any `PalimpDrawerActionsContext` value above it, so
+nesting adds buttons and never replaces them.
 
 ## The token
 
@@ -186,6 +239,21 @@ or catch it by name. The check is class identity, so it needs a single resolved 
 **No provider means a silent no-op.** `PalimpPublishContext` in `core` holds `null` under a
 non-nullable type. If a user has a `publishToken` but this provider isn't mounted, the Publish
 button renders enabled and clicking does nothing.
+
+**An extra target is not covered by the token pre-check.** Publish disables itself as
+`Publish token expired` when the status poll is refused; an extra target never polls, so a dead
+token shows only after a press — `<label> failed`, with the auth cause under it. And `Running...`
+lasts as long as the dispatch *and* the run lookup, up to about seven seconds, because the run
+lookup is the same as Publish's (quirk 1 of the GitHub API quirks above); a lookup that runs out after a successful dispatch reads as failed even though the
+run started, exactly as it does for Publish.
+
+**An extra target on Publish's own workflow shows up as Publish's latest run.** That is not a
+link between the two: `getLatestRun` reads the newest dispatched run of the workflow, and the
+target's dispatch is one. Point extra targets at a different workflow, which is what they are for.
+
+**`extraTargets` is in a memo's deps by identity**, like `inputs` below. From a Server Component
+that is free — the prop arrives once per server render. From a client component, an inline array
+rebuilds every action on each render; hoist it.
 
 **`inputs` is in the memo deps by identity.** `PalimpGithubPublishProvider` memoizes on
 `[owner, repo, workflow, ref, inputs, followAllEvents]`; an inline object literal for `inputs` is
