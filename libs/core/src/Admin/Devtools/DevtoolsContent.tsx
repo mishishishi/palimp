@@ -1,5 +1,7 @@
 import { Button, Divider, Space } from "antd";
-import { useState } from "react";
+import { use, useState } from "react";
+import { PalimpDrawerActionsContext } from "../../PalimpDrawerActionsContext";
+import { DrawerActionButton } from "./DrawerActionButton";
 import { PublishStatusIcon } from "./PublishStatusIcon";
 import { PublishStatusModal } from "./PublishStatusModal";
 import { usePreviewButton } from "./usePreviewButton";
@@ -28,6 +30,8 @@ export const DevtoolsContent = () => {
   const fieldCount = groups.reduce((n, g) => n + g.fields.length, 0);
 
   const collections = useCollections();
+
+  const actions = use(PalimpDrawerActionsContext);
 
   // Order matters. `tokenExpired` sits with the other two "cannot work" cases
   // because the poll proves it without a press; `error` sits above `isPending`
@@ -114,6 +118,10 @@ export const DevtoolsContent = () => {
         onClose={() => setModalOpen(false)}
         dispatchError={publish.error}
       />
+
+      {actions.map((action) => (
+        <DrawerActionButton key={action.id} action={action} />
+      ))}
 
       <Divider
         dashed

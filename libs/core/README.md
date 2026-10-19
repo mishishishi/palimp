@@ -12,7 +12,7 @@ writing an adapter of your own.
 
 Three, and the split matters — see [Quirks](#quirks).
 
-- `@palimp/core` — types, adapter interfaces, the four React contexts,
+- `@palimp/core` — types, adapter interfaces, the five React contexts,
   `PalimpPublishAuthError`, and the collections module re-exported. Cheap; no UI deps pulled in.
 - `@palimp/core/collections` — the collections module alone: `defineCollection`,
   `collectionKey`, `parseCollectionDocument`, `serializeCollectionDocument` and their types.
@@ -72,6 +72,24 @@ import a class from a package that imports `core`.
 handed — it comes from the signed-in user's profile, not from adapter config, which is why
 `publish()` takes it as an argument instead of closing over it.
 
+A **drawer action** is not an adapter but sits on the same footing — optional, host-supplied,
+read by the drawer through a context:
+
+```ts
+interface PalimpDrawerAction {
+  id: string;                      // React key, and the mutation key suffix
+  label: string;
+  confirm?: { title: string; content: string; okText?: string };
+  needsPublishToken?: boolean;     // disabled + "Missing publish token" without one
+  run: (user: User) => Promise<{ message: string; href?: string } | void>;
+}
+```
+
+`run` is a function, so a Server Component cannot hand one over. A host configuring palimp from
+its layout uses a serializable form that builds these inside a client provider —
+[`extraTargets`](../publish-github/README.md#extra-targets) on `PalimpGithubPublishProvider` is
+the first-party one.
+
 `LoginValue` is a single-member discriminated union
 (`{ type: "email-password"; email; password }`). Adding OAuth means widening it here, in `core`.
 
@@ -83,6 +101,7 @@ import {
   PalimpClientBackendContext,  // PalimpClientBackendAdapter
   PalimpPublishContext,        // PalimpPublishAdapter | null
   PalimpMediaContext,          // PalimpMediaAdapter | null
+  PalimpDrawerActionsContext,  // ReadonlyArray<PalimpDrawerAction>, default []
 } from "@palimp/core";
 ```
 
@@ -95,6 +114,11 @@ consumers check rather than a default that never survives to a read: `usePublish
 `available: !!adapter`, `usePublishRun` passes `skipToken`, and the drawer disables Publish with
 "No publish provider"; the `image` widget disables Upload and Choose existing with
 "No media provider" and leaves its URL input working.
+
+`PalimpDrawerActionsContext` is optional too, but its empty state is an empty array rather than
+`null`: no actions needs no message of its own, the drawer just renders none. A provider of it
+should **concatenate** with the value above it — `[...use(PalimpDrawerActionsContext), ...mine]`
+— so that nesting adds actions rather than hiding a parent's.
 
 `PalimpGeneralContext.admin` is `boolean | undefined`, and all three states are used:
 `undefined` means the session check hasn't run yet, so `LoginPageCore` shows a spinner instead
@@ -186,7 +210,9 @@ build-time snapshot the caller passed in. Under `preview` it renders as plain te
 
 The left-edge drawer: Save (with a pending count), preview toggle, a **Fields** button opening the
 modal of off-page fields, Publish plus a status icon and detail modal, and the signed-in user with
-a logout button. Mounted by `PalimpProvider` when `admin` is true.
+a logout button. Mounted by `PalimpProvider` when `admin` is true. Between Publish and the
+divider sits one button per **drawer action** in `PalimpDrawerActionsContext` — none by default,
+so a host that configures none sees the drawer unchanged.
 
 The Publish button's label is the whole of its error reporting, and it has six states:
 `No publish provider` and `Missing publish token` (no adapter / no token on the profile, both
@@ -199,6 +225,18 @@ beside a running dispatch. `PublishStatusModal` takes the dispatch rejection as 
 `dispatchError` prop and renders it above the run rows, with a plain-language cause — separate
 wording from its `Couldn't load run status.`, because that one means the run cannot be *seen* and
 this one means there is *no run*.
+
+A drawer action's button borrows that vocabulary rather than inventing one. `Missing publish
+token` (disabled) when `needsPublishToken` is set and the profile has none; `Running...` while
+`run` is pending; then either the result — `message`, as a link when `href` is set, or `Done`
+when `run` returned nothing — or `<label> failed`, with the button **enabled** as the retry. The
+result or the error stays in a small line under the button until the next press, which calls
+`reset()` first exactly as Publish does. The error line is the message plus the same
+plain-language cause the status modal uses, narrowed on `PalimpPublishAuthError`, with the
+action's own label named as the retry. With `confirm` set, the press opens `modal.confirm` from
+`Modal.useModal()` — the host's antd theme, as with Save — with **Cancel focused**, so Enter is
+the harmless choice. An action is a sibling of Publish, not a mode of it: nothing polls it, and
+its run never appears in the status icon unless it happens to dispatch Publish's own workflow.
 
 `DevtoolsProvider` calls `getUser()` to fill the drawer. When that rejects — `hasSession()` reads
 an unvalidated cookie or flag, so it can report a session the server has already dropped — the
@@ -360,6 +398,33 @@ while the cause is a refused token. The plan that added these states weighed and
 `onError` toast for being *more* transient than this
 ([docs/plans/editor-safety/01-publish-failure-is-silent.md](../../docs/plans/editor-safety/01-publish-failure-is-silent.md));
 persisting the failure itself would need somewhere to put it, which is a different plan.
+
+**A drawer action's result is React state too, and it does not read the status poll.** A reload
+forgets the last result line and the last failure, for the reason above. And the action does not
+share Publish's `Publish token expired` pre-check: that poll proves Publish's *workflow* readable,
+not the action's, so a dead token on an action surfaces only after a press, as `<label> failed`
+with the auth cause. An action that dispatches and then fails to locate its run (the GitHub form's
+`could not locate dispatched run`) reads as failed, with the generic cause saying nothing was
+rebuilt — which is wrong in that one case, and is the same wrong Publish has.
+
+**Answering an action's confirm closes the drawer.** The drawer's click-outside handler
+([Devtools/index.tsx](src/Admin/Devtools/index.tsx)) listens on `document` and closes on any
+click outside its own element, and `modal.confirm` renders in a portal on `body` — so Cancel and
+OK both count as outside. The editor does not see `Running...`; the result line is waiting when
+they reopen it, because a closed antd `Drawer` keeps its content mounted. Save's confirm has
+always done the same. Fixing it means teaching that handler about antd's portals, for every
+modal at once, which is its own change.
+
+**The drawer does not grow with its actions.** Its height is a fixed `40vh`, and on a ~780 px
+viewport the stock buttons fill the body exactly — the flex spacer above Publish is what absorbs
+the slack, and one action uses it up. Measured on the example: an idle action overflows the body
+by 5 px, its result line by about 25 px, its error (the message plus the cause) by about 120 px.
+The body scrolls, so nothing is unreachable, but the signed-in user and the logout button are
+what scroll out of view first.
+
+**Drawer action ids must be unique across the whole tree.** The id is the React key, so two
+actions sharing one — easy with nested providers, which concatenate — collide and React warns.
+Nothing dedupes them.
 
 **`PublishStatusModal` is handed the dispatch error rather than reading it.** Calling
 `usePublishButton()` a second time inside the modal looks equivalent and is not: react-query's
