@@ -38,7 +38,7 @@ flowchart TB
 
     subgraph core["@palimp/core — contracts + admin UI"]
         contracts["PalimpServerBackendAdapter<br/>PalimpClientBackendAdapter<br/>PalimpPublishAdapter<br/>PalimpMediaAdapter"]
-        ctx["PalimpGeneralContext<br/>PalimpClientBackendContext<br/>PalimpPublishContext<br/>PalimpMediaContext"]
+        ctx["PalimpGeneralContext<br/>PalimpClientBackendContext<br/>PalimpPublishContext<br/>PalimpMediaContext<br/>PalimpDrawerActionsContext"]
         admin["EditComponent · Devtools · LoginPageCore<br/>PalimpFields · editsStore · fieldsStore"]
     end
 
@@ -63,7 +63,10 @@ play — it mounts a provider, and everything above it is written against the in
 
 Five seams. Four are adapter interfaces the host implements or picks; the fifth is the React
 context quartet that carries them down the tree. Two of the four are optional —
-`PalimpPublishAdapter` and `PalimpMediaAdapter` — and their contexts are the nullable ones.
+`PalimpPublishAdapter` and `PalimpMediaAdapter` — and their contexts are the nullable ones. A
+fifth context, `PalimpDrawerActionsContext`, rides beside the quartet without being a seam of its
+own: it carries no adapter, only host-configured buttons for the drawer (see
+[Drawer actions](#drawer-actions)).
 
 ### `PalimpServerBackendAdapter` — bulk load for the build
 
@@ -225,6 +228,7 @@ value with no adapter mounted, and that relocating a bucket rewrites documents. 
 | `PalimpPublishContext` | the publish adapter | `PalimpGithubPublishProvider` |
 | `PalimpMediaContext` | the media adapter, or `null` | `PalimpSupabaseProvider`'s `media` prop |
 | `PalimpGeneralContext` | UI state: `admin`, `preview`, `togglePreview`, `reset` | `PalimpProvider` |
+| `PalimpDrawerActionsContext` | extra drawer buttons, default `[]` | `PalimpGithubPublishProvider`'s `extraTargets` prop, or the host |
 
 The first three carry adapters and are provided by the backend packages. The last carries no
 adapter at all — it is the session/UI state that `core`'s admin components read:
@@ -453,6 +457,32 @@ safe — a renamed workflow fails the poll too, with a `404`, and that is not a 
 What does not survive is the dispatch failure itself: it is React state, so a reload forgets it,
 because unlike a run's status there is nothing on GitHub to re-read. Design record:
 [plans/editor-safety/01-publish-failure-is-silent.md](plans/editor-safety/01-publish-failure-is-silent.md).
+
+### Drawer actions
+
+Some hosts need a second button beside Publish — the case that produced it is a preview site
+whose editor also rebuilds the live one, a different workflow on the same repo. A host-side
+button cannot do it well: the drawer's `position: fixed` wrapper
+([Devtools/index.tsx](../libs/core/src/Admin/Devtools/index.tsx)) is a stacking context with no
+z-index, so a host control either paints over the open drawer or relies on palimp mounting last,
+and it has to copy antd's look without importing antd. So the button lives in the drawer.
+
+`core` owns the generic half: `PalimpDrawerActionsContext` holds `PalimpDrawerAction`s —
+`{ id, label, confirm?, needsPublishToken?, run(user) }` — and `DevtoolsContent` renders one per
+action between Publish and the divider, each a `useMutation` with `reset()` before `mutate()`
+like Publish, and the result or failure kept under the button until the next press. Nothing polls
+an action: it reports one line and an optional link, and that `href` is the seam along which one
+could grow into a polled target later without an API break.
+
+The other half exists because of a premise, not a preference: **a Next.js host configures palimp
+from its layout, a Server Component, and a function cannot be passed from a Server Component to a
+client one.** A `run` callback therefore cannot be configured where palimp is configured. So
+`@palimp/publish-github` takes a serializable `extraTargets` prop — workflow, label, confirm, ref,
+inputs — and builds the actions inside its own client provider. The provider concatenates with
+any parent value, so nesting adds actions. The context file imports only `createContext`, which
+keeps the eager cost of the whole feature at a few hundred bytes; the button itself is behind the
+same `next/dynamic` boundary as the rest of the drawer. Design record:
+[plans/drawer-actions.md](plans/drawer-actions.md).
 
 ## Sessions and false positives
 

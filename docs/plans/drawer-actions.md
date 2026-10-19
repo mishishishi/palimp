@@ -199,3 +199,105 @@ Written in `nano-pro-web`'s private build record as the replacement for a host-s
 was built and rejected on 2026-10-19 (§Why the host could not do it alone). It was moved here
 because the work is library work. The host keeps its own copy for the revendor and the
 client-facing documents that follow it.
+
+---
+
+## Divergence notes
+
+Added 2026-10-19, after the build (`5518e9e`, 1.10.0). The plan above is kept as written; these
+record where the code went somewhere it did not say, or where it said nothing.
+
+**1. A `run` that returns nothing reads `Done`.** The plan's type allows `void` but never says
+what the result line shows for it. Asked and answered by the owner the same day: a fixed `Done`,
+so a void action still reads differently from one never pressed. `extraTargets` always returns a
+message, so only a hand-written action reaches it.
+
+**2. `dispatchCause` takes the retry button's name.** Reused as the plan says, but verbatim it
+ends *"pressing Publish again is the retry"* under a button that is not Publish. Owner's call:
+`dispatchCause(error, button = "Publish")`, so the status modal's text is byte-identical and an
+action reads *"pressing Publish live site again is the retry"*. The first sentence, *"The site
+was not rebuilt."*, is still shared, which is right for the GitHub form and only approximately
+right for an arbitrary action.
+
+**3. `ref` is inherited, `inputs` are not.** The plan's mapping passes `{ owner, repo, workflow,
+ref, inputs }` without saying whose `ref`. Owner's call: `target.ref ?? provider ref ?? "main"`,
+same repo, same likely branch. `inputs` stay the target's own, because a different workflow can
+`422` on inputs it does not declare.
+
+**4. `focusable.autoFocusButton`, not `autoFocusButton`.** The plan's spelling is deprecated in
+antd 6.4.4 and logs a console warning on every confirm — found by the verification run below,
+through the Next.js dev overlay, and fixed before the commit. Same behaviour, Cancel focused.
+
+**5. Shape of the code.** The type is `PalimpDrawerAction.ts` and the context
+`PalimpDrawerActionsContext.ts`, mirroring `PalimpPublishAdapter.ts` / `PalimpPublishContext.ts`;
+`PalimpDrawerActionResult` is exported beside the action. Because a hook cannot be called in a
+`.map`, each action is a `DrawerActionButton` component that calls `useDrawerAction(action)`; the
+hook owns the `useMutation` (key `["palimp:action", id]`) and the `Modal.useModal` holder, so
+each button renders its own holder. `publish-github` exports `GithubExtraTarget` from `./react`.
+
+**6. The version bump went inside the feature commit**, as every previous version did, rather
+than as a step-6 commit of its own. Step 6's packing still ran from a clean tree after it.
+
+**7. The architecture's seam list did not change.** The new context is not a seam — it carries
+no adapter — so `architecture.md` gained a row in the context table and a §Drawer actions under
+§Publish, and the "five seams" sentence names it as riding beside the quartet.
+
+**8. Two behaviours nobody planned, both recorded as quirks in `core`'s README, neither fixed:**
+
+- **Answering the confirm closes the drawer.** `Devtools/index.tsx` closes on any `document`
+  click outside the drawer element, and the confirm is portalled to `body`. The editor does not
+  see `Running...`; the result is waiting when they reopen it, because a closed antd `Drawer`
+  keeps its content mounted. Save's confirm has always done the same, so this is not new, but
+  this feature is the first to put a confirm in front of every press.
+- **The drawer does not grow.** It is a fixed `40vh`, and on a 776 px viewport the stock buttons
+  fill its body exactly (254 of 254 px). One idle action overflows by 5 px, its result line by
+  about 25 px, its error by about 120 px. It scrolls, so everything stays reachable, but the
+  user row and logout are what scroll out first. This bears directly on the host's check that
+  *"the drawer is fully usable with the action present"* — usable, by scrolling.
+
+**9. An action does not share Publish's `Publish token expired` pre-check.** Not a divergence —
+the plan's state list has no such state — but it is visible: with a dead token, Publish reads
+`Publish token expired` (disabled) while the action beside it is still pressable, and fails
+after the press with the auth cause. The poll proves Publish's workflow readable, not the
+action's.
+
+## Verification run — 2026-10-19, live host
+
+`pnpm check-types` and `pnpm build` pass. Then `examples/supabase-next` with real Supabase
+credentials, a real fine-grained PAT on `mishishishi/palimp`, and the drawer driven over CDP.
+The example's `layout.tsx` was given a **local, uncommitted** `extraTargets` entry — the host's
+own, labels and confirm included — reading its workflow from an env var, so a rename was an
+`.env.local` edit. That layout has no `"use client"`, so the prop crossed the Server → Client boundary
+for real — the constraint the whole second half exists for.
+
+⚠ **Both workflows were `deploy-supabase.yml`** — the owner's choice over `deploy-firebase.yml`,
+to avoid a Firebase deploy as a side effect. So this is not the plan's "two workflows", and the
+action's run became Publish's latest run (Publish's icon followed it, which is quirk-level
+behaviour documented in `publish-github`'s README). Check 5 was run after that run completed so
+the two did not overlap.
+
+| check | result |
+| --- | --- |
+| 1 — an action dispatches | **pass.** Confirm → OK: `Running...` (disabled) for 3.6 s, then `Publish live site` with the link `Run 39193624363 started` → `github.com/mishishishi/palimp/actions/runs/39193624363`, `target=_blank`. The run appeared on GitHub as a `workflow_dispatch` and completed `success` |
+| 2 — Cancel dispatches nothing | **pass.** The confirm opened with *Publish the live site?*, the host's body text, `Cancel` / `Publish live site`, and **Cancel focused**. Cancel: no label change, no result line, and the dispatched-run count on GitHub stayed at 6. A later Cancel with a result already shown left that result in place |
+| 3 — a garbage token reads the auth cause | **pass.** With `publish_token` set to garbage by the owner: Publish read `Publish token expired` (disabled) after the poll's retries; the action stayed enabled; pressing it gave `Publish live site failed` (enabled), `GitHub dispatch failed: 401` and *"The publish token on your account was refused…"*. No run created. The token was restored and Publish re-enabled on reload |
+| 4 — a renamed workflow reads the generic cause | **pass.** Action's workflow set to `does-not-exist.yml`: `Publish live site failed` (enabled), `GitHub dispatch failed: 404`, and *"The site was not rebuilt. … pressing Publish live site again is the retry."* Publish beside it unchanged and enabled |
+| 5 — Publish is unaffected | **pass.** `Publish` → `Dispatching...` → `Publishing...` (3.9 s) → `Publish` (56.6 s), the status modal tracking run `39193698824` to `success`, matching GitHub. The action's result line from check 1 was untouched throughout |
+
+### What the run cost, and one false start
+
+- The example's Supabase project had been **paused** since the 1.9.0 run (NXDOMAIN on public
+  DNS, then `521` and `502` while it woke). The owner restored it; the session cookie in the rig
+  profile had not survived, so they signed in again.
+- The first check-1 attempt **404'd for a rig reason, not a library one**: the env var was
+  appended to an `.env.local` with no trailing newline, which glued it onto
+  `NEXT_PUBLIC_GITHUB_WORKFLOW`. That press is not counted. It did render the failure state
+  correctly, a free preview of check 4.
+- Two real `deploy-supabase.yml` runs were dispatched (`39193624363`, `39193698824`), each a
+  Pages redeploy of `main`. Both `success`.
+
+### Not covered by this run
+
+- **The host's own checks**, including its eager-chunk gate and *"the drawer is fully usable
+  with the action present"* on its viewport — see divergence 8.
+- **Firebase.** Not in scope for this run, per the standing rule.
