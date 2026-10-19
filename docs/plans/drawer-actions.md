@@ -301,3 +301,12 @@ the two did not overlap.
 - **The host's own checks**, including its eager-chunk gate and *"the drawer is fully usable
   with the action present"* on its viewport — see divergence 8.
 - **Firebase.** Not in scope for this run, per the standing rule.
+
+## Handover — 2026-10-19
+
+1.10.0 was packed from `11cec1e` against a clean tree, after `pnpm install --frozen-lockfile`,
+`pnpm check-types` and `pack.mjs`'s own assertions passed. The five tarballs, the manifest and
+`SHA256SUMS.txt` are staged at `~/.t3/userdata/attachments/palimp-1.10.0-tarballs/`; the
+handover is [../releases/1.10.0-revendor-nano-pro-web.md](../releases/1.10.0-revendor-nano-pro-web.md),
+which carries the checksums and the host's step 6 — the plan's §What the host does with it, with
+`{url}` spelled as the host's own template literal, since palimp renders `content` verbatim.
