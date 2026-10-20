@@ -5,10 +5,16 @@ import { useDrawerAction } from "./useDrawerAction";
 
 interface Props {
   action: PalimpDrawerAction;
+  guardUnsaved: (next: () => void) => void;
+  unsavedHint: string | undefined;
 }
 
-export const DrawerActionButton = ({ action }: Props) => {
-  const state = useDrawerAction(action);
+export const DrawerActionButton = ({
+  action,
+  guardUnsaved,
+  unsavedHint,
+}: Props) => {
+  const state = useDrawerAction(action, guardUnsaved);
 
   // Publish's vocabulary, in Publish's order: the "cannot work" case first,
   // then the press in flight, then a failure — which leaves the button
@@ -23,7 +29,13 @@ export const DrawerActionButton = ({ action }: Props) => {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-      <Button {...state.props} block>
+      <Button
+        {...state.props}
+        block
+        {...(action.publishesSavedContent && unsavedHint
+          ? { title: unsavedHint }
+          : {})}
+      >
         {label}
       </Button>
 

@@ -1,5 +1,5 @@
-import { Button, Divider, Space } from "antd";
-import { use, useState } from "react";
+import { Button, Divider, Space, Typography } from "antd";
+import { use, useState, type CSSProperties } from "react";
 import { PalimpDrawerActionsContext } from "../../PalimpDrawerActionsContext";
 import { DrawerActionButton } from "./DrawerActionButton";
 import { PublishStatusIcon } from "./PublishStatusIcon";
@@ -8,6 +8,7 @@ import { usePreviewButton } from "./usePreviewButton";
 import { usePublishButton } from "./usePublishButton";
 import { usePublishRun } from "./usePublishRun";
 import { useSaveButton } from "./useSaveButton";
+import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 import { useDevtools } from "./DevtoolsContext";
 import { Boxes, ListChecks, LogOut } from "lucide-react";
 import { useFieldGroups } from "../fieldsStore";
@@ -15,10 +16,17 @@ import { FieldsModal } from "./FieldsModal";
 import { useCollections } from "../collectionsStore";
 import { CollectionsModal } from "./CollectionsModal";
 
+const ellipsis: CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 export const DevtoolsContent = () => {
   const { user, logout } = useDevtools();
 
   const save = useSaveButton();
+  const unsaved = useUnsavedChangesGuard(save.requestSave);
   const preview = usePreviewButton();
   const publish = usePublishButton();
   const { data: run } = usePublishRun();
@@ -55,10 +63,23 @@ export const DevtoolsContent = () => {
   return (
     <>
       <Button {...save.props} block type="primary">
-        {save.isPending ? "Saving..." : `Save (${save.length})`}
+        {save.isPending
+          ? "Saving..."
+          : save.error
+            ? "Save failed"
+            : `Save (${save.length})`}
       </Button>
 
+      {/* Persistent until the next press, like Publish's failure: the edits
+          are still pending, and the editor needs to know why. */}
+      {save.error ? (
+        <Typography.Text type="danger" style={{ fontSize: 12 }}>
+          {save.error.message}
+        </Typography.Text>
+      ) : null}
+
       {save.contextHolder}
+      {unsaved.element}
 
       <Button {...preview.props} block>
         {preview.preview ? "Edit mode" : "Preview mode"}
@@ -91,11 +112,15 @@ export const DevtoolsContent = () => {
         onClose={() => setCollectionsOpen(false)}
       />
 
-      <div style={{ flex: "1 1 0" }} />
+      {/* An empty grid row: its extra gap sets Publish apart from the
+          editing buttons. It used to grow into the fixed-height drawer. */}
+      <div />
 
       <Space.Compact block>
         <Button
           {...publish.props}
+          onClick={() => unsaved.guard(publish.props.onClick)}
+          {...(unsaved.hint ? { title: unsaved.hint } : {})}
           disabled={
             publish.props.disabled ||
             !publish.available ||
@@ -120,7 +145,12 @@ export const DevtoolsContent = () => {
       />
 
       {actions.map((action) => (
-        <DrawerActionButton key={action.id} action={action} />
+        <DrawerActionButton
+          key={action.id}
+          action={action}
+          guardUnsaved={unsaved.guard}
+          unsavedHint={unsaved.hint}
+        />
       ))}
 
       <Divider
@@ -131,14 +161,16 @@ export const DevtoolsContent = () => {
       />
 
       <Space.Compact>
-        <div style={{ flex: "1 1 0" }}>
+        {/* `minWidth: 0` lets a long address ellipsise instead of pushing
+            Logout out and scrolling the drawer sideways. */}
+        <div style={{ flex: "1 1 0", minWidth: 0 }} title={user.email}>
           {user.name ? (
             <>
-              <div>{user.name}</div>
-              <div style={{ fontSize: "12px" }}>{user.email}</div>
+              <div style={ellipsis}>{user.name}</div>
+              <div style={{ ...ellipsis, fontSize: "12px" }}>{user.email}</div>
             </>
           ) : (
-            user.email
+            <div style={ellipsis}>{user.email}</div>
           )}
         </div>
         <Button

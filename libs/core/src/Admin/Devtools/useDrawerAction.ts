@@ -4,7 +4,10 @@ import type { PalimpDrawerAction } from "../../PalimpDrawerAction";
 import { queryClient } from "../queryClient";
 import { useDevtools } from "./DevtoolsContext";
 
-export const useDrawerAction = (action: PalimpDrawerAction) => {
+export const useDrawerAction = (
+  action: PalimpDrawerAction,
+  guardUnsaved: (next: () => void) => void,
+) => {
   const { user } = useDevtools();
   const [modal, contextHolder] = Modal.useModal();
 
@@ -23,7 +26,7 @@ export const useDrawerAction = (action: PalimpDrawerAction) => {
     mutation.mutate();
   };
 
-  const onClick = () => {
+  const ask = () => {
     if (!action.confirm) {
       start();
       return;
@@ -43,6 +46,11 @@ export const useDrawerAction = (action: PalimpDrawerAction) => {
       onOk: start,
     });
   };
+
+  // The unsaved-changes guard first, so the action's own "are you sure" is
+  // the last thing asked, after the drafts are dealt with.
+  const onClick = () =>
+    action.publishesSavedContent ? guardUnsaved(ask) : ask();
 
   const hasToken = !action.needsPublishToken || !!user.publishToken;
 

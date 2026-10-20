@@ -12,6 +12,30 @@ interface Props {
   children: ReactNode;
 }
 
+/**
+ * Per tab, not per browser: the mode belongs to this editing session, and a
+ * static export turns most navigations into document loads, which drop React
+ * state. `localStorage` would also open every new tab in preview, weeks later.
+ */
+const PREVIEW_KEY = "palimp:preview";
+
+// Storage can throw — disabled cookies, a sandboxed frame — and losing the
+// mode across a reload is not worth breaking the editor over.
+const readPreview = (): boolean => {
+  try {
+    return sessionStorage.getItem(PREVIEW_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const writePreview = (preview: boolean | null): void => {
+  try {
+    if (preview === null) sessionStorage.removeItem(PREVIEW_KEY);
+    else sessionStorage.setItem(PREVIEW_KEY, preview ? "1" : "0");
+  } catch {}
+};
+
 export const PalimpProvider = ({ children }: Props) => {
   const [admin, setAdmin] = useState<boolean | undefined>(undefined);
   const [preview, setPreview] = useState(false);
@@ -20,7 +44,11 @@ export const PalimpProvider = ({ children }: Props) => {
 
   useEffect(() => {
     if (admin === undefined) {
-      setAdmin(backend.hasSession());
+      const session = backend.hasSession();
+      // Same effect, same commit: the first admin paint already has the
+      // stored mode, so editors never flash before preview applies.
+      setPreview(session && readPreview());
+      setAdmin(session);
     }
   }, [admin]);
 
@@ -29,9 +57,13 @@ export const PalimpProvider = ({ children }: Props) => {
       value={{
         admin: admin,
         preview,
-        togglePreview: () => setPreview((s) => !s),
+        togglePreview: () => {
+          writePreview(!preview);
+          setPreview(!preview);
+        },
 
         reset: () => {
+          writePreview(null);
           setAdmin(undefined);
           setPreview(false);
         },

@@ -94,6 +94,9 @@ const toDrawerAction = (
     label: target.label,
     ...(target.confirm ? { confirm: target.confirm } : {}),
     needsPublishToken: true,
+    // Every target is a build of the same saved content, so a draft left
+    // unsaved is left out of it — the live site most of all.
+    publishesSavedContent: true,
     run: async (user) => {
       // The drawer disables the button without a token; this is the guard
       // for a caller that does not.

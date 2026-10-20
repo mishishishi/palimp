@@ -42,51 +42,69 @@ export const useSaveButton = () => {
     [pending, collections],
   );
 
-  const onClick = () => {
-    if (unpublishable.length === 0) {
-      mutation.mutate();
-      return;
-    }
+  // `mutateAsync` rejects on failure; the rejection is already in
+  // `mutation.error` for the label, so here it only becomes `false`.
+  const save = (): Promise<boolean> =>
+    mutation.mutateAsync().then(
+      () => true,
+      () => false,
+    );
+
+  /** Resolves `true` once the batch is written, `false` when the editor
+   *  backs out of the collections confirm or `setKeys` throws — so a caller
+   *  chaining Publish after it never publishes half of what was meant. */
+  const requestSave = (): Promise<boolean> => {
+    // A retry clears the previous failure, as Publish's press does.
+    mutation.reset();
+
+    if (unpublishable.length === 0) return save();
 
     // Confirms, never blocks (D15): Save is one all-or-nothing batch, so a
     // disabled button would hold every other pending edit hostage to one bad
     // item — and a saved invalid item loses nothing.
-    modal.confirm({
-      title: "Some items won't appear on the site",
-      content: (
-        <>
-          <p>
-            Saving keeps them, but the site leaves them out until they are
-            fixed in Collections:
-          </p>
-          <ul style={{ paddingInlineStart: 20, margin: 0 }}>
-            {unpublishable.slice(0, MAX_LINES).map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
-          </ul>
-          {unpublishable.length > MAX_LINES && (
-            <p style={{ marginBottom: 0 }}>
-              and {unpublishable.length - MAX_LINES} more items
+    return new Promise((resolve) => {
+      modal.confirm({
+        title: "Some items won't appear on the site",
+        content: (
+          <>
+            <p>
+              Saving keeps them, but the site leaves them out until they are
+              fixed in Collections:
             </p>
-          )}
-        </>
-      ),
-      okText: "Save anyway",
-      cancelText: "Keep editing",
-      // Returns nothing, so the dialog closes at once and the drawer's button
-      // shows "Saving..." as it always has.
-      onOk: () => {
-        mutation.mutate();
-      },
+            <ul style={{ paddingInlineStart: 20, margin: 0 }}>
+              {unpublishable.slice(0, MAX_LINES).map((line, i) => (
+                <li key={i}>{line}</li>
+              ))}
+            </ul>
+            {unpublishable.length > MAX_LINES && (
+              <p style={{ marginBottom: 0 }}>
+                and {unpublishable.length - MAX_LINES} more items
+              </p>
+            )}
+          </>
+        ),
+        okText: "Save anyway",
+        cancelText: "Keep editing",
+        // Returns nothing, so the dialog closes at once and the drawer's
+        // button shows "Saving..." as it always has.
+        onOk: () => {
+          void save().then(resolve);
+        },
+        onCancel: () => resolve(false),
+      });
     });
   };
 
   return {
     props: {
       disabled: pending.length === 0 || mutation.isPending,
-      onClick,
+      onClick: () => void requestSave(),
     },
+    requestSave,
     isPending: mutation.isPending,
+    // Until 1.11.0 a rejected `setKeys` read exactly like a finished save:
+    // the label went back to "Save (N)" and nothing said otherwise.
+    error: mutation.error,
     length: pending.length,
     // Rendered once by the drawer, so the confirm inherits the host's antd
     // theme — the reason for the hook form over static Modal.confirm.
