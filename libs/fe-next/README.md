@@ -379,7 +379,19 @@ On mount it calls `backend.hasSession()` — synchronously, which is why that me
 It also owns `preview` (the toggle that renders edits as text) and `reset()`, which sets `admin`
 back to `undefined` and thereby re-arms the session check. Login and logout both call it.
 
+`preview` is kept in `sessionStorage` under `palimp:preview` since 1.11.0, and read in the same
+effect that reads the session, so the first admin render already has it — no editors flash in
+before preview applies. `reset()` clears it, so a logout and a fresh login land in edit mode.
+
 ## Quirks
+
+**Preview mode persists per tab, not per browser.** It survives a soft navigation (it is React
+state in a provider above the page) and, since 1.11.0, a reload or any other document load — on
+a static export a plain `<a>`, a locale switcher that sets `location`, or an RSC-fetch fallback
+are all document loads. A new tab starts in edit mode, deliberately: `localStorage` would open
+every tab in preview, weeks later, with nothing on the page saying why. Storage that throws
+(disabled cookies, a sandboxed frame) degrades to the old behaviour rather than breaking the
+editor. Unsaved *drafts* do not persist yet: a document load still drops them, silently.
 
 **A photo is baked like every other value.** An `image` URL reaches the visitor's HTML at build
 time, so a photo used in `generateMetadata` (`og:image`) behaves exactly like an `asString`

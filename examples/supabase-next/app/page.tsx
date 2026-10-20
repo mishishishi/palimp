@@ -4,6 +4,7 @@ import {
   PalimpFields,
 } from "@palimp/fe-next";
 import { type Metadata } from "next";
+import Link from "next/link";
 import { varieties, varietyBodies } from "./collections.ts";
 import { VarietyCard } from "./VarietyCard.tsx";
 import {
@@ -50,6 +51,9 @@ export default async function Page() {
           <a href="#visit" style={styles.navLink}>
             {p("nav.visit", { defaultMessage: "Visit" })}
           </a>
+          <Link href="/about" style={styles.navLink}>
+            About page
+          </Link>
         </nav>
       </header>
 

@@ -81,6 +81,7 @@ interface PalimpDrawerAction {
   label: string;
   confirm?: { title: string; content: string; okText?: string };
   needsPublishToken?: boolean;     // disabled + "Missing publish token" without one
+  publishesSavedContent?: boolean; // ask about unsaved drafts first, as Publish does
   run: (user: User) => Promise<{ message: string; href?: string } | void>;
 }
 ```
@@ -238,6 +239,29 @@ action's own label named as the retry. With `confirm` set, the press opens `moda
 the harmless choice. An action is a sibling of Publish, not a mode of it: nothing polls it, and
 its run never appears in the status icon unless it happens to dispatch Publish's own workflow.
 
+**Unsaved drafts are asked about before anything publishes.** Publish builds from saved content,
+so pressing it with `Save (N)` pending used to leave those drafts out without a word. Since
+1.11.0 Publish — and every action with `publishesSavedContent` set, which `extraTargets` does —
+goes through one shared guard
+([useUnsavedChangesGuard.tsx](src/Admin/Devtools/useUnsavedChangesGuard.tsx)): with nothing
+pending it runs at once; otherwise a modal titled `N unsaved changes won't be published` offers
+**Cancel**, **Publish without them** and **Save and publish** (primary, focused). Save and
+publish runs the same `requestSave()` the Save button does — including the collections confirm —
+and publishes only when that resolves `true`: a failed save, or `Keep editing` at the confirm,
+publishes nothing. The guard runs before an action's own `confirm`, so the editor answers the
+drafts question first. While drafts are pending the guarded buttons also carry a `title`,
+`N unsaved changes won't be included`, so the warning is there before the press.
+
+**Save says when it fails.** Until 1.11.0 a rejected `setKeys` read exactly like a finished save
+— the label went back to `Save (N)`. Now it reads `Save failed`, with the error message under it,
+and the button stays enabled as the retry; the drafts are kept, as they always were.
+
+**The float button shows the mode.** It is a pencil in edit mode and an eye, with a `Preview
+mode` tooltip, in preview — preview outlives a reload since 1.11.0 (see
+[`fe-next`](../fe-next/README.md#quirks)), so a page with no editors on it says why while the
+drawer is closed. The drawer itself is sized by its content and centred on the left edge, and
+scrolls only past `100vh - 32px`.
+
 `DevtoolsProvider` calls `getUser()` to fill the drawer. When that rejects — `hasSession()` reads
 an unvalidated cookie or flag, so it can report a session the server has already dropped — the
 drawer renders `DevtoolsSessionError` instead: the reason, the underlying message, and a **Sign
@@ -377,8 +401,9 @@ snapshot, read through `useSyncExternalStore`. The snapshot is cached because
 `Array.from(map.entries())` per call would loop forever. Server snapshots are `undefined` and a
 shared empty array, so SSR is safe.
 
-Being a singleton means one edit buffer per page, shared by every `EditComponent` regardless of
-which provider tree it sits in.
+Being a singleton means one edit buffer per document, shared by every `EditComponent`
+regardless of which provider tree it sits in — and surviving a soft navigation, but not a reload
+or any other document load.
 
 ## Quirks
 
@@ -407,20 +432,20 @@ with the auth cause. An action that dispatches and then fails to locate its run 
 `could not locate dispatched run`) reads as failed, with the generic cause saying nothing was
 rebuilt — which is wrong in that one case, and is the same wrong Publish has.
 
-**Answering an action's confirm closes the drawer.** The drawer's click-outside handler
-([Devtools/index.tsx](src/Admin/Devtools/index.tsx)) listens on `document` and closes on any
-click outside its own element, and `modal.confirm` renders in a portal on `body` — so Cancel and
-OK both count as outside. The editor does not see `Running...`; the result line is waiting when
-they reopen it, because a closed antd `Drawer` keeps its content mounted. Save's confirm has
-always done the same. Fixing it means teaching that handler about antd's portals, for every
-modal at once, which is its own change.
+**"Outside the drawer" means outside its React tree, not its DOM.** The click-outside handler
+([Devtools/index.tsx](src/Admin/Devtools/index.tsx)) closes the drawer unless a capture handler
+on the drawer's wrapper saw the click first — and React events bubble through portals to their
+React parent, so a click in any modal, confirm, popconfirm or select opened from the drawer
+counts as inside. Until 1.11.0 it was a DOM `contains` test, and answering any confirm closed the
+drawer. The other side of the same rule: a click in an **inline editor** never closes the drawer,
+because the interaction guard below stops it at `window` capture before the handler sees it.
+That was true of the old handler too. Click page text that is not an editor, or the close button.
 
-**The drawer does not grow with its actions.** Its height is a fixed `40vh`, and on a ~780 px
-viewport the stock buttons fill the body exactly — the flex spacer above Publish is what absorbs
-the slack, and one action uses it up. Measured on the example: an idle action overflows the body
-by 5 px, its result line by about 25 px, its error (the message plus the cause) by about 120 px.
-The body scrolls, so nothing is unreachable, but the signed-in user and the logout button are
-what scroll out of view first.
+**The unsaved-changes guard counts every draft in this document, not this page's.**
+`editsStore` is one buffer for the whole document, so drafts typed on another route — reached by
+soft navigation — are in the count, and Save and publish saves them too. That is the same batch
+Save would write, so nothing is published that Save would not. A document load still loses them
+all, silently; that is the next release's work.
 
 **Drawer action ids must be unique across the whole tree.** The id is the React key, so two
 actions sharing one — easy with nested providers, which concatenate — collide and React warns.

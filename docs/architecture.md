@@ -318,7 +318,10 @@ Points worth knowing:
   `Set` of listeners plus a cached array snapshot, read through `useSyncExternalStore`. The
   cached snapshot exists because `useSyncExternalStore` requires a referentially stable
   `getSnapshot` result; rebuilding `Array.from(map.entries())` on every call would loop forever.
-  The server snapshot is `undefined` / a shared empty array, so SSR is safe.
+  The server snapshot is `undefined` / a shared empty array, so SSR is safe. It lives as long as
+  the document: a soft navigation keeps every draft, a document load — a reload, a plain `<a>`,
+  a `location` assignment, which on a static export is most navigations that do not go through
+  `next/link` — drops them all.
 - **`fieldsStore` mirrors it for keys that are not on the page.** Same shape, keyed by
   registration id so two `<PalimpFields>` declaring one group can each withdraw their own fields
   ([libs/core/src/Admin/fieldsStore.ts](../libs/core/src/Admin/fieldsStore.ts)). The Devtools
@@ -327,7 +330,14 @@ Points worth knowing:
   entry, the same badge count, and the same `setKeys` batch. It is a placement feature, not a
   second editor.
 - **A failed save keeps the edits.** `setKeys` throwing skips `editsStore.clear()`, so the
-  drawer still holds everything the user typed.
+  drawer still holds everything the user typed — and since 1.11.0 the button says
+  `Save failed`, with the message under it.
+- **Publish asks about drafts it would leave out.** A build reads saved content only, so Publish
+  — and any drawer action flagged `publishesSavedContent` — passes through one guard
+  ([useUnsavedChangesGuard.tsx](../libs/core/src/Admin/Devtools/useUnsavedChangesGuard.tsx)):
+  nothing pending runs straight through; otherwise *Cancel / Publish without them / Save and
+  publish*, where the last chains `requestSave()` — collections confirm included — and publishes
+  only on a written batch ([plans/editor-flow.md](plans/editor-flow.md)).
 - **Collections put a JSON document in a key — the one class of key whose `value` is not prose.**
   A collection (`defineCollection` in [libs/core/src/collections.ts](../libs/core/src/collections.ts))
   is one storage key holding `{ "v": 1, "items": [...] }` as a **string**, so `Message` and both
@@ -356,7 +366,10 @@ Points worth knowing:
   externally managed file a working value
   ([plans/collections/03-media.md](plans/collections/03-media.md)).
 - **Preview mode short-circuits the input**, rendering `value` as text — including unsaved
-  edits. It shows how the page will look, not how it currently is.
+  edits. It shows how the page will look, not how it currently is. The mode is per tab: held in
+  `PalimpProvider` and mirrored to `sessionStorage`, read in the same effect as `hasSession()`,
+  so it outlives a document load without editors flashing in first, and a new tab starts in
+  edit mode.
 - **A window-capture guard keeps a nested editor inert.** An editor can land inside an `<a>`, a
   `<summary>`, or a `<div>` with a `mousedown` handler, where the click that focuses it also
   activates the ancestor. [interactionGuard.ts](../libs/core/src/Admin/interactionGuard.ts)
@@ -468,7 +481,7 @@ z-index, so a host control either paints over the open drawer or relies on palim
 and it has to copy antd's look without importing antd. So the button lives in the drawer.
 
 `core` owns the generic half: `PalimpDrawerActionsContext` holds `PalimpDrawerAction`s —
-`{ id, label, confirm?, needsPublishToken?, run(user) }` — and `DevtoolsContent` renders one per
+`{ id, label, confirm?, needsPublishToken?, publishesSavedContent?, run(user) }` — and `DevtoolsContent` renders one per
 action between Publish and the divider, each a `useMutation` with `reset()` before `mutate()`
 like Publish, and the result or failure kept under the button until the next press. Nothing polls
 an action: it reports one line and an optional link, and that `href` is the seam along which one

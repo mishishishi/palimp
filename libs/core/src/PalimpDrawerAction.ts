@@ -17,6 +17,10 @@ export interface PalimpDrawerAction {
   /** Disable the button with "Missing publish token" when the signed-in user
    *  has none — for an action that dispatches with `user.publishToken`. */
   needsPublishToken?: boolean;
+  /** Ask before `run` — and before `confirm` — when the drawer holds unsaved
+   *  edits, offering to save them first. For an action that builds the site
+   *  from saved content, which would otherwise leave the drafts out. */
+  publishesSavedContent?: boolean;
   /** The result stays under the button until the next press. Returning
    *  nothing reads as "Done"; throwing reads as "<label> failed", narrowed on
    *  `PalimpPublishAuthError` exactly as Publish's dispatch is. */

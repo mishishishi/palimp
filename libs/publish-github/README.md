@@ -104,6 +104,11 @@ client side of that boundary: it turns each entry into a drawer action with
 target's workflow and reports `Run <id> started`, linked to the run. The labels and the confirm
 are the host's strings, in the host's language.
 
+Since 1.11.0 each one also sets `publishesSavedContent: true`: a target rebuilds a site from saved
+content just as Publish does, so with drafts pending the press first asks the same
+`N unsaved changes won't be published` question — Cancel, Publish without them, or Save and
+publish — and only then shows the target's own `confirm`.
+
 An extra target **dispatches and never polls** — no status icon, no modal, no "running" state
 after the dispatch resolves. Hence no `followAllEvents`: it would mean nothing. `inputs` is not
 inherited because a different workflow can reject inputs it does not declare; `ref` is, because
