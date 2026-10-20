@@ -334,3 +334,68 @@ example has one content route**; add a second (`app/about/page.tsx`, a few `p()`
 | D4 | Default button in the B modal | **Save and publish** | Cancel (safer, but the common intent is to include the edits) |
 | D5 | Guard drawer actions too | **Yes, via `publishesSavedContent`, set by `extraTargets`** | Publish only (leaves the production dispatch, the costlier case, unguarded) |
 
+## Divergence notes — 1.11.0
+
+Added 2026-10-20, after building 1.11.0 (B0, A1 + C3, B + C1, C6). The plan above is kept as
+written; these record what step 0 found, and where the code went somewhere the plan did not say.
+
+**1. Step 0: a document load, as F1 guessed.** On the example served as a static export with
+clean URLs, a `window.__probe` survived a `next/link` click and died on a plain `<a>`. On the
+host's preview deploy, the header link from `/en/` to `/en/projects/` kept the probe — a soft
+navigation. So the host's provider does survive its ordinary links; the mode is lost on document
+loads: a reload, the `LocaleSwitcher` (a document load by design), and any plain `<a>`. A1 covers
+all three for the mode; drafts wait for A2.
+
+**2. B0 listens on `window`, and clears the flag on the way down.** The plan's sketch reset
+`insideRef` after reading it in a `document` listener. A click whose propagation a handler stops
+before that listener — a React `stopPropagation` inside the drawer — would then leave the flag set
+and swallow the next genuine outside click. So a `window` capture listener clears it, the
+wrapper's `onClickCapture` sets it, and a `window` bubble listener reads it. Clicking an **inline
+editor** still never closes the drawer: the interaction guard stops that click at `window`
+capture, before the bubble listener. That was true of the `contains` handler as well, and it is
+now a documented quirk in core's README.
+
+**3. The B modal is a controlled `Modal`, not `modal.confirm`.** Three buttons — Cancel, Publish
+without them, Save and publish — do not fit confirm's two. It is one `useUnsavedChangesGuard`
+per drawer, in `DevtoolsContent`, whose `guard` is passed to every `DrawerActionButton`, so
+there is one dialog and one Save in flight. `useDrawerAction(action, guardUnsaved)` runs the
+guard before the action's own `confirm`. The `title` hint (`N unsaved changes won't be
+included`) on every guarded button was not in the plan; it puts the warning before the press.
+
+**4. `requestSave()` resolves a boolean.** `useSaveButton` now returns `requestSave():
+Promise<boolean>` — `true` once the batch is written, `false` on `Keep editing` at the
+collections confirm or a rejected `setKeys` — and the Save button's own press is
+`void requestSave()`. Save and publish publishes only on `true`.
+
+**5. C6 needed more than `max-height`.** The `40vh` box went, and the drawer's root and wrapper
+became `position: relative`, so it sizes to its content and the fixed column centres it; the cap
+(`calc(100vh - 32px)`) sits on the section. But in a flex column a short viewport *squashed*
+every button instead of scrolling, so the body is now a one-column grid
+(`minmax(0, 1fr)`, so the scrollbar does not push the column wider than the drawer). The spacer
+above Publish is an empty grid row, kept for its gap. Found while measuring: a long email in the
+user row overflowed the 192 px body sideways by 20 px — the horizontal scrollbar visible in every
+1.10.0 screenshot — so the name and email now ellipsise, with the address as a `title`.
+
+**6. The version bump is inside the feature commit**, as every release before it.
+
+### Verification, 2026-10-20
+
+Run against the Supabase example as a static export (`next build`, served with clean URLs) in
+Chrome over CDP, signed in as the owner. Every GitHub dispatch was **intercepted and failed in
+the browser** (CDP `Fetch` on `*/dispatches*`), so nothing deployed: "dispatched" below means the
+request was made, which ends the code path this release changed. Firebase was not run.
+
+| step | result |
+| --- | --- |
+| 0 | as divergence 1 |
+| 1 | preview on → soft navigation to `/about` keeps it (probe intact) → reload of `/about` and `/` keeps it, **0 editors at any DOM mutation** (control in edit mode: 33) → new tab opens in edit mode → logout clears `palimp:preview`, login lands in edit mode |
+| 2 | float button `lucide-eye` in preview, `lucide-pencil-ruler` in edit |
+| 5 | modal on Publish with `Save (1)`; Cancel → no request, drawer open; Publish without them → dispatched, `Save (1)` kept, drawer open; Save and publish → saved (`Save (0)`, value persisted across a reload) then dispatched |
+| 6 | Supabase writes failed via CDP (`POST /rest/v1/inline`) → `Save failed` + `TypeError: Failed to fetch`, **no dispatch**; retry with writes restored → `Save (0)` |
+| 7 | blank collection item → Save and publish → collections confirm → Keep editing → neither saved nor dispatched, `Save (1)` kept; Discard's popconfirm no longer closes the drawer |
+| 8 | temporary `extraTargets` entry in the example (reverted) → title hint, unsaved-changes modal, then the target's own confirm with Cancel focused → OK → dispatched; drawer open throughout |
+| 9 | not run separately; the `Save (0)` branch is the same `guard` call, taken by every press after a save above |
+| C6 | 820 px viewport: drawer 354 px, no scroll either axis, with an action present; 300 px: capped at 268 px, body scrolls, buttons keep 32 px |
+
+The edit used for steps 5–6 (`nav.brand`) was saved back to its original value.
+
