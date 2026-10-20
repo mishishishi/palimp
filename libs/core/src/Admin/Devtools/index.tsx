@@ -1,16 +1,81 @@
-import { Drawer, FloatButton } from "antd";
+import { Button, Drawer, FloatButton, notification, Popconfirm, Space } from "antd";
 import { Eye, PencilRuler } from "lucide-react";
 import { use, useEffect, useRef, useState } from "react";
 import { PalimpGeneralContext } from "../../PalimpGeneralContext";
+import { ChangesModal } from "./ChangesModal";
 import { DevtoolsContent } from "./DevtoolsContent";
 import { DevtoolsProvider } from "./DevtoolsContext";
-import { usePendingEdits } from "../editsStore";
+import { editsStore, usePendingEdits } from "../editsStore";
+import { startDraftsPersistence } from "../draftsPersistence";
+
+/** Set once the restore notice has shown in this tab, so a reload — or any
+ *  other document load — does not repeat it. */
+const NOTICED_KEY = "palimp:drafts-noticed";
 
 export const Devtools = () => {
   const [expanded, setExpanded] = useState(false);
   const { preview } = use(PalimpGeneralContext);
 
   const pending = usePendingEdits();
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [notices, noticesHolder] = notification.useNotification();
+
+  // Admin-only and client-only by being here, so neither SSR nor the visitor
+  // bundle ever reaches storage.
+  useEffect(function persistDrafts() {
+    const persistence = startDraftsPersistence();
+    const { restored } = persistence;
+
+    let noticed = true;
+    try {
+      noticed = sessionStorage.getItem(NOTICED_KEY) !== null;
+      if (restored > 0) sessionStorage.setItem(NOTICED_KEY, "1");
+    } catch {}
+
+    // A restored draft can be older than the stored value it shadows; the
+    // notice is how the editor learns it exists before a Save writes it.
+    if (restored > 0 && !noticed) {
+      const key = "palimp:restored";
+      notices.info({
+        key,
+        title:
+          restored === 1
+            ? "Restored 1 unsaved change"
+            : `Restored ${restored} unsaved changes`,
+        description: "Typed earlier and not saved yet.",
+        placement: "bottomLeft",
+        duration: 0,
+        actions: (
+          <Space>
+            <Popconfirm
+              title="Discard every unsaved change?"
+              description="Saved content is not affected."
+              okText="Discard"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => {
+                editsStore.clear();
+                notices.destroy(key);
+              }}
+            >
+              <Button size="small">Discard</Button>
+            </Popconfirm>
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => {
+                setChangesOpen(true);
+                notices.destroy(key);
+              }}
+            >
+              Review
+            </Button>
+          </Space>
+        ),
+      });
+    }
+
+    return persistence.stop;
+  }, []);
 
   // "Inside" is the drawer's *React* subtree, not its DOM subtree. antd
   // portals every modal to <body>, so a DOM `contains` test read the OK button
@@ -138,9 +203,17 @@ export const Devtools = () => {
           }}
         >
           <DevtoolsProvider>
-            <DevtoolsContent />
+            <DevtoolsContent onReviewChanges={() => setChangesOpen(true)} />
           </DevtoolsProvider>
         </Drawer>
+
+        {/* Outside the drawer so Review can open it from the notice with the
+            drawer closed; inside the wrapper so its clicks count as inside. */}
+        <ChangesModal
+          open={changesOpen}
+          onClose={() => setChangesOpen(false)}
+        />
+        {noticesHolder}
       </div>
     </div>
   );

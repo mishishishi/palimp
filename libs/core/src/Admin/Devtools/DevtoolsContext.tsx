@@ -5,6 +5,7 @@ import { createContext, use, useMemo, type ReactNode } from "react";
 import { PalimpClientBackendContext } from "../../PalimpClientBackendContext";
 import { PalimpGeneralContext } from "../../PalimpGeneralContext";
 import type { User } from "../../types";
+import { discardDrafts } from "../draftsPersistence";
 import { queryClient } from "../queryClient";
 import { Spinner } from "../Spinner";
 import { DevtoolsSessionError } from "./DevtoolsSessionError";
@@ -36,6 +37,9 @@ export const DevtoolsProvider = (props: { children: ReactNode }) => {
         user: user.data,
         logout: async () => {
           await backend.logout();
+          // Only a deliberate sign-out: the session-error path keeps them,
+          // since the same editor is about to sign back in to save them.
+          discardDrafts();
           queryClient.invalidateQueries();
           ctx.reset();
           notification.info({

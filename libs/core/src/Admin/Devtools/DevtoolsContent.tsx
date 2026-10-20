@@ -1,4 +1,4 @@
-import { Button, Divider, Space, Typography } from "antd";
+import { Button, Divider, Popconfirm, Space, Typography } from "antd";
 import { use, useState, type CSSProperties } from "react";
 import { PalimpDrawerActionsContext } from "../../PalimpDrawerActionsContext";
 import { DrawerActionButton } from "./DrawerActionButton";
@@ -10,7 +10,7 @@ import { usePublishRun } from "./usePublishRun";
 import { useSaveButton } from "./useSaveButton";
 import { useUnsavedChangesGuard } from "./useUnsavedChangesGuard";
 import { useDevtools } from "./DevtoolsContext";
-import { Boxes, ListChecks, LogOut } from "lucide-react";
+import { Boxes, FileDiff, ListChecks, LogOut } from "lucide-react";
 import { useFieldGroups } from "../fieldsStore";
 import { FieldsModal } from "./FieldsModal";
 import { useCollections } from "../collectionsStore";
@@ -22,7 +22,13 @@ const ellipsis: CSSProperties = {
   whiteSpace: "nowrap",
 };
 
-export const DevtoolsContent = () => {
+interface Props {
+  /** Opens the Changes list, which lives beside the drawer rather than in it
+   *  so the restore notice can open it too. */
+  onReviewChanges: () => void;
+}
+
+export const DevtoolsContent = ({ onReviewChanges }: Props) => {
   const { user, logout } = useDevtools();
 
   const save = useSaveButton();
@@ -62,13 +68,23 @@ export const DevtoolsContent = () => {
 
   return (
     <>
-      <Button {...save.props} block type="primary">
-        {save.isPending
-          ? "Saving..."
-          : save.error
-            ? "Save failed"
-            : `Save (${save.length})`}
-      </Button>
+      <Space.Compact block>
+        <Button {...save.props} type="primary" style={{ flex: 1 }}>
+          {save.isPending
+            ? "Saving..."
+            : save.error
+              ? "Save failed"
+              : `Save (${save.length})`}
+        </Button>
+        <Button
+          type="primary"
+          icon={<FileDiff size={16} strokeWidth={1.2} />}
+          title="Review unsaved changes"
+          aria-label="Review unsaved changes"
+          onClick={onReviewChanges}
+          disabled={save.length === 0}
+        />
+      </Space.Compact>
 
       {/* Persistent until the next press, like Publish's failure: the edits
           are still pending, and the editor needs to know why. */}
@@ -173,10 +189,26 @@ export const DevtoolsContent = () => {
             <div style={ellipsis}>{user.email}</div>
           )}
         </div>
-        <Button
-          icon={<LogOut size={16} strokeWidth={1.2} />}
-          onClick={() => logout()}
-        />
+        {/* Logout discards drafts since 1.12.0 — they would otherwise wait
+            in this browser for whoever signs in next — so it asks first. */}
+        <Popconfirm
+          title={
+            save.length === 1
+              ? "Discard 1 unsaved change?"
+              : `Discard ${save.length} unsaved changes?`
+          }
+          description="Signing out discards them. Save first to keep them."
+          okText="Sign out"
+          okButtonProps={{ danger: true }}
+          onConfirm={() => logout()}
+          disabled={save.length === 0}
+        >
+          <Button
+            icon={<LogOut size={16} strokeWidth={1.2} />}
+            title="Sign out"
+            onClick={save.length === 0 ? () => logout() : undefined}
+          />
+        </Popconfirm>
       </Space.Compact>
     </>
   );

@@ -29,6 +29,13 @@ export const editsStore = {
     edits.clear();
     emit();
   },
+  /** Swaps the whole buffer and emits once — for drafts restored from
+   *  storage, or replaced by another tab's write. */
+  replaceAll: (entries: ReadonlyArray<readonly [string, string]>): void => {
+    edits.clear();
+    for (const [key, value] of entries) edits.set(key, value);
+    emit();
+  },
   entries: (): ReadonlyArray<readonly [string, string]> => snapshot,
   subscribe: (l: Listener): (() => void) => {
     listeners.add(l);
