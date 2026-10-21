@@ -19,6 +19,7 @@ the package READMEs.
 | --- | --- | --- |
 | [1.9.0-revendor-nano-pro-web.md](1.9.0-revendor-nano-pro-web.md) | `nano-pro-web` | The silent publish failure. No host code change; the one trap is that a revoked token disables Publish before it can be pressed, so `Publish failed` is only reachable by renaming the workflow. |
 | [1.10.0-revendor-nano-pro-web.md](1.10.0-revendor-nano-pro-web.md) | `nano-pro-web` | Publish live site, inside the drawer. One host change — `extraTargets` on the provider, from the layout, behind two preview-only env vars. Two traps: answering the confirm closes the drawer, and the fixed `40vh` drawer starts to scroll with one action. |
+| [1.12.0-revendor-nano-pro-web.md](1.12.0-revendor-nano-pro-web.md) | `nano-pro-web` | Editor flow, 1.11.0 and 1.12.0 in one step: preview mode per tab, drafts per browser, the unsaved-changes guard on both publishes, the Changes list. No host code change. The trap is in the host's own docs — they teach a reload as the way to throw edits away, and that the drawer closes on a confirm. |
 
 Earlier handovers (1.7.0 collections, 1.8.0 save integrity, 1.8.1 publish status) were written into
 the gitignored `dist-packages/` and exist only in the host's `.locally_ignored/`. They are not
