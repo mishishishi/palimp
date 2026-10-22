@@ -399,3 +399,46 @@ request was made, which ends the code path this release changed. Firebase was no
 
 The edit used for steps 5–6 (`nav.brand`) was saved back to its original value.
 
+## Divergence notes — 1.12.0
+
+Added 2026-10-20, after building 1.12.0 (A2 + C2) on top of 1.11.0, same day.
+
+**7. The Changes list opens from an icon button beside Save, not a `Changes (N)` button above it.**
+The count is already on Save and on the float button's badge; a third copy in a full-width row
+would add height for nothing. It is the pattern Publish already uses — a `Space.Compact` of the
+action and an icon that opens its detail — with a `FileDiff` icon titled *Review unsaved
+changes*, disabled at `Save (0)`. Rows show the field label as `group › label` when this page
+registered one, the key under it, the draft, and — not in the plan — the fetched value struck
+through when react-query has it cached, which is what makes a stale restored draft visible.
+
+**8. Only the drawer's logout discards drafts, and it asks first.** The plan said *logout clears
+drafts*. There are two sign-out paths: the drawer's, and the session-error state's **Sign out**,
+which is how an editor with an expired session gets back in to save. Discarding on the second
+would lose exactly the work the expiry stranded, so only the first discards. Because A2 makes a
+logout's discard permanent where it used to be a reload's accident, the logout button now
+carries a popconfirm — *Discard N unsaved changes?* — whenever drafts are pending, and signs out
+at once otherwise.
+
+**9. The restore notice is an antd `notification`, bottom-left, not text in the drawer.** The
+drawer is closed on load, and a notice inside it would be seen only by someone who already
+suspects something. It stays until answered or closed; **Discard** sits behind a popconfirm,
+**Review** opens the Changes list. "Once per tab" is a `sessionStorage` marker, set only when the
+notice shows — so the first reload in a tab where the editor typed shows it once too.
+
+**10. A key that leaves the set through another tab is refetched.** Not in the plan: a Save in
+tab A clears tab B's draft, and without a refetch tab B's editor would fall back to the value it
+fetched before that Save. Invalidating the departed keys' queries fixes it for saves and costs one
+read for discards.
+
+### Verification, 2026-10-20
+
+Same rig as 1.11.0, dispatch interceptor running throughout; no Publish was pressed.
+
+| step | result |
+| --- | --- |
+| 3 | draft on `/`, soft navigation to `/about` → `palimp:drafts` holds it; reload of `/about` → badge 1 and *Restored 1 unsaved change* with Discard / Review; a further reload in that tab → no notice. A second tab opens with badge 2 and its own notice; a per-row Discard there clears the first tab's badge; Discard all in the first clears the second's; a Save (of an unchanged value) in the second → `Save (0)` in both. Drawer logout with a draft → popconfirm → Sign out → `palimp:drafts` gone; sign back in → `Save (0)`, no notice |
+| 4 | Review → *2 unsaved changes* listing `nav.brand` (typed on `/`) and `about.title`; per-row Discard drops one and the inline editor loses its cyan outline; on `/` the fetched value shows struck through under the draft; a collection draft reads `varieties (collection) · collection.varieties · 8 items` |
+| — | `palimp:drafts` set to `{not json` → reload renders normally and the blob is removed (the first build ignored it without removing it; fixed before this record) |
+
+No content was changed by these runs: every draft was discarded, and the one Save wrote
+`nav.brand`'s existing value.

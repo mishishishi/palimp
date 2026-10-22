@@ -3,3 +3,4 @@ node_modules
 libs/*/dist
 *.tsbuildinfo
 dist-packages
+.env*

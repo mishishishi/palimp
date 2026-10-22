@@ -402,8 +402,24 @@ snapshot, read through `useSyncExternalStore`. The snapshot is cached because
 shared empty array, so SSR is safe.
 
 Being a singleton means one edit buffer per document, shared by every `EditComponent`
-regardless of which provider tree it sits in — and surviving a soft navigation, but not a reload
-or any other document load.
+regardless of which provider tree it sits in.
+
+**Drafts persist per browser since 1.12.0.**
+[draftsPersistence.ts](src/Admin/draftsPersistence.ts), started by an effect in `Devtools` (so
+admin-only and client-only), mirrors the buffer to `localStorage` under `palimp:drafts` as
+`{ "v": 1, "entries": [[key, value], …] }`, hydrates it once through
+`editsStore.replaceAll(entries)`, and follows other tabs' writes on the `storage` event — every
+tab holds the same set, and a Save or a discard in one clears the others. A key that leaves the
+set that way is refetched, since the value under it may have been saved over there. An
+unreadable blob is removed, never thrown. A deliberate **sign-out discards** the drafts (asking
+first when there are any); nothing else does — not a closed tab, not an expired session.
+
+When hydration brings drafts back, a notice says so once per tab — *Restored N unsaved changes*,
+with **Review** and **Discard** — because a restored draft can be older than the stored value it
+shadows. **Review** opens the **Changes** list, which the icon button beside Save opens too:
+every pending draft with its field label (when this page registered one), the new text, the
+fetched value struck through when it is cached, a per-row **Discard** and a **Discard all**.
+Discarding is local — `editsStore.delete` / `clear` — and never touches saved content.
 
 ## Quirks
 
@@ -444,8 +460,23 @@ That was true of the old handler too. Click page text that is not an editor, or 
 **The unsaved-changes guard counts every draft in this document, not this page's.**
 `editsStore` is one buffer for the whole document, so drafts typed on another route — reached by
 soft navigation — are in the count, and Save and publish saves them too. That is the same batch
-Save would write, so nothing is published that Save would not. A document load still loses them
-all, silently; that is the next release's work.
+Save would write, so nothing is published that Save would not. Since 1.12.0 that is also true
+across document loads, because the drafts are.
+
+**A restored draft overwrites whatever was saved since it was typed.** Drafts are values, not
+diffs: a draft typed last week, restored today, replaces the stored text on the next Save even
+if another admin changed it in between. The restore notice and the Changes list (with the fetched
+value struck through under the draft) are how the editor finds out; nothing compares them.
+
+**The Changes list labels only what this page registered.** A field's label comes from a
+`<PalimpFields>` mounted here, a collection's from a `<PalimpCollections>` here. A draft typed on
+another page shows as its raw key — a collection draft still reads as `N items`, because its
+value parses as a document wherever it is.
+
+**Signing out from the session-error state keeps the drafts.** Only the drawer's own logout
+discards them. The error state's **Sign out** is how an editor whose session expired gets back
+in to save, so discarding there would lose exactly the work the expiry stranded. The other side:
+whoever signs in next in that browser gets the restore notice for them.
 
 **Drawer action ids must be unique across the whole tree.** The id is the React key, so two
 actions sharing one — easy with nested providers, which concatenate — collide and React warns.

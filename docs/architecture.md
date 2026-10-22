@@ -318,10 +318,13 @@ Points worth knowing:
   `Set` of listeners plus a cached array snapshot, read through `useSyncExternalStore`. The
   cached snapshot exists because `useSyncExternalStore` requires a referentially stable
   `getSnapshot` result; rebuilding `Array.from(map.entries())` on every call would loop forever.
-  The server snapshot is `undefined` / a shared empty array, so SSR is safe. It lives as long as
-  the document: a soft navigation keeps every draft, a document load — a reload, a plain `<a>`,
-  a `location` assignment, which on a static export is most navigations that do not go through
-  `next/link` — drops them all.
+  The server snapshot is `undefined` / a shared empty array, so SSR is safe. In memory it lives
+  as long as the document, and on a static export most navigations that skip `next/link` are a
+  document load — so since 1.12.0 it is mirrored to `localStorage` (`palimp:drafts`) by
+  [draftsPersistence.ts](../libs/core/src/Admin/draftsPersistence.ts), hydrated once when the
+  drawer mounts, and kept in step across tabs by the `storage` event. Drafts are per browser,
+  discarded only by a deliberate sign-out or by the editor (the drawer's **Changes** list), and
+  never written anywhere but this browser until Save.
 - **`fieldsStore` mirrors it for keys that are not on the page.** Same shape, keyed by
   registration id so two `<PalimpFields>` declaring one group can each withdraw their own fields
   ([libs/core/src/Admin/fieldsStore.ts](../libs/core/src/Admin/fieldsStore.ts)). The Devtools

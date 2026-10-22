@@ -391,7 +391,8 @@ a static export a plain `<a>`, a locale switcher that sets `location`, or an RSC
 are all document loads. A new tab starts in edit mode, deliberately: `localStorage` would open
 every tab in preview, weeks later, with nothing on the page saying why. Storage that throws
 (disabled cookies, a sandboxed frame) degrades to the old behaviour rather than breaking the
-editor. Unsaved *drafts* do not persist yet: a document load still drops them, silently.
+editor. Unsaved *drafts* persist too since 1.12.0, but per browser rather than per tab — see
+[`core`](../core/README.md#editsstore).
 
 **A photo is baked like every other value.** An `image` URL reaches the visitor's HTML at build
 time, so a photo used in `generateMetadata` (`og:image`) behaves exactly like an `asString`
